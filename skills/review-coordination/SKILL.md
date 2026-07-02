@@ -64,6 +64,7 @@ gh api repos/{owner}/{repo}/pulls/{number}/comments --jq '[.[] | {path, line: .o
 Assemble a prior-review summary containing:
 - **Prior verdicts**: which reviewers posted, what verdict (APPROVED, CHANGES_REQUESTED, COMMENTED), and the verdict body
 - **Prior findings**: the inline comments grouped by file, with severity labels if present
+- **Refuted findings**: findings filtered out by verification (Step 3.5) in earlier rounds, each with its one-line refutation. Sourced from the prior round's session context or the collapsed "Filtered out by verification" section in the posted review body.
 
 This summary is passed to agents in Step 2.
 
@@ -79,7 +80,7 @@ Pass each agent:
 **On round 2+, also pass each agent:**
 - The round number (e.g. "This is review round 2")
 - The prior-review summary from Step 1.9
-- These instructions: "Prior review findings are listed below. Verify that flagged issues were addressed. Do not re-flag findings that have been resolved. Only raise genuinely new issues not covered by prior rounds."
+- These instructions: "Prior review findings are listed below. Verify that flagged issues were addressed. Do not re-flag findings that have been resolved. Findings listed as refuted were checked by an adversarial verifier and found to be false positives -- do not re-raise them. Only raise genuinely new issues not covered by prior rounds."
 
 Example: for a Go PR with auth changes, dispatch four agents in parallel (no `name` parameter):
 - `subagent_type: "clawdio:code-reviewer"`
@@ -112,6 +113,14 @@ Then produce a verdict:
 ```
 
 If any specialist returned a Critical finding, the default verdict is CHANGES REQUESTED.
+
+## Step 3.5: Verify findings
+
+Before presenting or posting anything, invoke `Skill(clawdio:verify-findings)` on the merged Critical and Important findings. Nits pass through unverified. The skill fans out one verifier agent per finding (router main loop, in parallel) and returns a verdict for each.
+
+- **Confirmed** and **plausible** findings proceed to Step 4 unchanged.
+- **Refuted** findings move out of the verdict sections into a collapsed "Filtered out by verification" section at the end of the review body, one-line refutation each. Never silently dropped.
+- Findings whose file:line could not be validated against the diff are downgraded to file + code snippet references before posting.
 
 ## Step 4: Post to GitHub
 
@@ -150,7 +159,7 @@ EOF
 
 Rules:
 - `event`: `"REQUEST_CHANGES"` when verdict is CHANGES REQUESTED or BLOCKED. `"COMMENT"` when APPROVE.
-- `body`: the verdict summary (blockers, should-fix, nits) plus any findings that reference lines NOT in the diff. GitHub rejects inline comments on lines outside the diff, so those go here.
+- `body`: the verdict summary (blockers, should-fix, nits) plus any findings that reference lines NOT in the diff. GitHub rejects inline comments on lines outside the diff, so those go here. Append the collapsed "Filtered out by verification" section from Step 3.5 if any findings were refuted.
 - `comments`: array of inline findings. Each needs `path`, `line` (line number in the NEW file from the diff hunk headers), and `body`.
 - `commit_id`: the head SHA fetched above. Required.
 

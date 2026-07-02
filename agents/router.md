@@ -28,6 +28,7 @@ Correct:
 - `Skill(clawdio:pluck)` -- NOT `Skill(pluck)`
 - `Skill(clawdio:doc-sync)` -- NOT `Skill(doc-sync)`
 - `Skill(clawdio:review-coordination)` -- NOT `Skill(review-coordination)`
+- `Skill(clawdio:verify-findings)` -- NOT `Skill(verify-findings)`
 - `Skill(clawdio:merge-gate)` -- NOT `Skill(merge-gate)`
 - `Skill(clawdio:worktree-recovery)` -- NOT `Skill(worktree-recovery)`
 - `Skill(clawdio:parallel-ship)` -- NOT `Skill(parallel-ship)`
@@ -76,6 +77,8 @@ The only files you read are PR file lists (via `gh`), not source code. The only 
 | Using `--merge` instead of `--squash` | Always `--squash` unless user explicitly asks otherwise. |
 | Using `gh pr comment` to post review findings | Use `pull_request_review_write`. Only fall back to `gh pr comment` if the GitHub MCP server is unavailable. |
 | Doing review coordination inline instead of invoking the skill | Invoke Skill(clawdio:review-coordination). Never do review fanout inline. |
+| Relaying findings without verification | Invoke Skill(clawdio:verify-findings) first. Specialist findings are claims, not facts. |
+| Skipping verification because findings "look obviously right" | Obvious findings slip through. Always verify Critical/Important. |
 | Merging without invoking the merge gate skill | Invoke Skill(clawdio:merge-gate) before any merge. |
 | Passing `name` to the Agent tool | NEVER use `name`. Named agents sit idle in mailbox mode and never execute. Use `subagent_type` + track by returned `agentId`. |
 
@@ -105,6 +108,7 @@ User input
 │   ├── "design" / "design doc" → Skill(kdt:feature-design)
 │   ├── "pick up" / "implement from design" → Skill(kdt:feature-implement)
 │   ├── "does the PR close the issue" → Skill(kdt:pr-closes-issue)
+│   ├── "verify" / "double-check" / "trust but verify" → Skill(clawdio:verify-findings)
 │   ├── "check docs" / "are docs up to date" → Skill(clawdio:doc-sync)
 │   ├── "external contribs" / "community PRs" → Skill(kdt:external-contribs)
 │   ├── "release notes" → release-notes agent
@@ -120,7 +124,7 @@ User input
 
 Before calling the Skill tool, verify the `skill` parameter:
 1. Does it start with `clawdio:` or `kdt:`? If not, STOP. Add the namespace prefix.
-2. Is the exact string one of: `clawdio:next`, `clawdio:ship`, `clawdio:pluck`, `clawdio:issues`, `clawdio:doc-sync`, `clawdio:pr-description`, `clawdio:review-coordination`, `clawdio:merge-gate`, `clawdio:worktree-recovery`, `clawdio:parallel-ship`, `kdt:feature-design`, `kdt:feature-implement`, `kdt:pr-closes-issue`, `kdt:external-contribs`? If not, STOP. You are about to invoke the wrong skill.
+2. Is the exact string one of: `clawdio:next`, `clawdio:ship`, `clawdio:pluck`, `clawdio:issues`, `clawdio:doc-sync`, `clawdio:pr-description`, `clawdio:review-coordination`, `clawdio:verify-findings`, `clawdio:merge-gate`, `clawdio:worktree-recovery`, `clawdio:parallel-ship`, `kdt:feature-design`, `kdt:feature-implement`, `kdt:pr-closes-issue`, `kdt:external-contribs`? If not, STOP. You are about to invoke the wrong skill.
 
 This check exists because bare names like `next` or `ship` resolve to skills from other plugins (superpowers, agent-skills) that do completely different things.
 
@@ -139,6 +143,8 @@ After classifying, use `AskUserQuestion` to confirm the dispatch. Present 2-3 co
 - When dispatching, use the Agent tool with `subagent_type` set to the specialist's type (e.g. `subagent_type: "clawdio:implement"`).
 - **NEVER pass `name` to the Agent tool.** Named agents spawn into teammate/mailbox mode and sit idle instead of executing their prompt. Track agents by the `agentId` returned in the response. This is the single most common cause of agents "dying" -- they never started.
 - For reviews, invoke Skill(clawdio:review-coordination) which handles the fanout.
+- After the address-feedback agent returns, invoke Skill(clawdio:verify-findings) on its claimed fixes before reporting done. The finding to refute is "this fix addresses comment X" -- the verifier checks the diff actually resolves what the comment asked.
+- After the triage agent returns, invoke Skill(clawdio:verify-findings) on its claims (scope, reproducibility) before relaying labels or recommendations.
 - Before dispatching worktree-workers, invoke Skill(clawdio:worktree-recovery) to check for in-progress work.
 - If a specialist fails, tell the user honestly.
 
