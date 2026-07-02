@@ -9,7 +9,7 @@ Personal Claude Code plugin for SDLC automation.
 ```
 you -> router -> specialist subagent(s) -> result
                     |
-                    +-- skills (next, ship, pluck, pr-description, issues, doc-sync, review-coordination, merge-gate, worktree-recovery, parallel-ship)
+                    +-- skills (next, ship, pluck, pr-description, issues, doc-sync, review-coordination, verify-findings, merge-gate, worktree-recovery, parallel-ship)
                     +-- hooks (block secrets, doc-sync-reminder, lint, format)
 ```
 
@@ -39,6 +39,7 @@ docs/            docs/architecture.md, docs/contributing.md, docs/references.md
 | `skills/pr-description/SKILL.md` | PR body template and conventions |
 | `skills/doc-sync/SKILL.md` | verifies and fixes docs against actual repo contents |
 | `skills/review-coordination/SKILL.md` | coordinates multi-specialist PR review fanout |
+| `skills/verify-findings/SKILL.md` | adversarial verification of specialist findings before presenting or posting |
 | `skills/merge-gate/SKILL.md` | pre-merge safety checks |
 | `skills/worktree-recovery/SKILL.md` | recovers in-progress worktree workers |
 | `skills/parallel-ship/SKILL.md` | dispatches multiple worktree-workers for multi-issue ship |

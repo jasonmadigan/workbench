@@ -68,7 +68,7 @@ Talk to the **router** agent. It classifies your request and dispatches the righ
 graph LR
     You -->|request| Router
     Router -->|classify & dispatch| Agents[agents: implement, triage, refine, address-feedback, release-notes, test-writer, docs, worktree-worker]
-    Router -->|invoke| Skills[skills: next, ship, pluck, issues, pr-description, doc-sync, review-coordination, merge-gate, worktree-recovery, parallel-ship]
+    Router -->|invoke| Skills[skills: next, ship, pluck, issues, pr-description, doc-sync, review-coordination, verify-findings, merge-gate, worktree-recovery, parallel-ship]
     Router -->|review fanout| Review[code-reviewer + test-verifier + domain specialists]
     Agents -->|result| Router
     Review -->|findings| Router
@@ -83,14 +83,17 @@ The router owns the review fanout. Subagents can't spawn sub-subagents, so the r
 ```mermaid
 graph TD
     A[User: review PR] --> B[Router: classify files]
-    B --> C{File types?}
+    B --> BB[classifier agent: bucket changed files by behaviour vs mechanical]
+    BB --> C{File types?}
     C -->|always| D[code-reviewer]
     C -->|always| E[test-verifier]
     C -->|*.go| F[go-k8s-reviewer]
     C -->|*auth*| G[auth-reviewer]
     C -->|*crypto*| H[security-auditor]
     D & E & F & G & H -->|findings| I[Router: merge across axes]
-    I --> J{Verdict}
+    I --> V[verify-findings: one verifier per Critical/Important finding]
+    V -->|confirmed + plausible| J{Verdict}
+    V -->|refuted| VF[filtered out, shown collapsed]
     J -->|APPROVE| K[offer merge]
     J -->|CHANGES REQUESTED| L[draft PR comment]
     J -->|BLOCKED| L
@@ -197,6 +200,7 @@ graph TD
 | release-notes | Generates grouped release notes between git tags |
 | test-writer | Finds coverage gaps, writes targeted tests matching project patterns |
 | test-verifier | Verifies PR test plans: runs tests, checks criteria, drives browser for UI checks |
+| verifier | Adversarial verifier for exactly one finding: refutes or confirms with evidence |
 | docs | Writes and updates documentation. Verifies every example and path. |
 | worktree-worker | Self-contained implement-to-PR in an isolated worktree. For parallel multi-issue dispatch. |
 
@@ -215,6 +219,7 @@ Clawdio provides its own skills for SDLC orchestration. For cross-cutting develo
 | issues | "create issue", "update issue" | `create`, `update`, `close`, `link`, `--repo` | Create, update, close issues. Manages PR-issue links and lifecycle state. |
 | doc-sync | "check docs", "are docs up to date" | none | Verify and fix documentation accuracy against actual repo contents |
 | review-coordination | PR review dispatch | none | Coordinates multi-specialist PR review fanout |
+| verify-findings | "verify", "double-check", after findings return | none | Adversarial verification of Critical/Important findings before presenting or posting |
 | merge-gate | pre-merge checks | none | Pre-merge safety checks before any merge |
 | worktree-recovery | worktree recovery | none | Recovers in-progress worktree workers before dispatching new ones |
 | parallel-ship | "ship #1, #2, #3" | `<issues>` | Dispatches multiple worktree-workers in parallel for multi-issue ship |

@@ -41,12 +41,14 @@ graph TD
     Decision -->|release notes| RN[release-notes agent]
     Decision -->|write tests| TW[test-writer agent]
     Decision -->|update docs| Docs[docs agent]
+    Review -->|first| CL[classifier agent]
     Review -->|parallel| CR[code-reviewer]
     Review -->|parallel| TV[test-verifier]
     Review -->|if Go| GK[go-k8s-reviewer]
     Review -->|if auth| AR[auth-reviewer]
     Review -->|if security| SA[security-auditor]
-    CR & TV & GK & AR & SA -->|findings| Router
+    CR & TV & GK & AR & SA -->|findings| VF[verify-findings: verifier per finding]
+    VF -->|verdicts| Router
     Parallel -->|worktree| WW1[worktree-worker 1]
     Parallel -->|worktree| WW2[worktree-worker 2]
     Parallel -->|worktree| WWN[worktree-worker N]
@@ -57,9 +59,11 @@ graph TD
 
 ### Multi-pass review
 
-Reviews use the fanout pattern: the router invokes the `review-coordination` skill, which classifies the PR's file paths and determines which specialist reviewers to spawn. The router then dispatches the specialists in parallel and collects results grouped by specialist.
+Reviews use the fanout pattern: the router invokes the `review-coordination` skill, which classifies the PR's file paths and determines which specialist reviewers to spawn. A read-only classifier agent buckets each changed file (behaviour, types-mechanical, mixed, tests-docs) before dispatch -- the router never reads the diff -- so specialists weight attention to behaviour and mixed files and the verdict leads with a focus table. The router then dispatches the specialists in parallel and collects results grouped by specialist.
 
-The router owns the agent dispatch because subagents cannot spawn sub-subagents (they don't have access to the Agent tool). The review-coordination skill provides the classification logic and merge strategy; the router executes it.
+Specialist findings are treated as claims, not facts. Before findings are presented or posted, the router invokes the `verify-findings` skill: one verifier agent per Critical/Important finding, in parallel, tasked with refuting it. Confirmed and plausible findings proceed; refuted findings are shown collapsed with their refutations and recorded in prior-review context so they do not resurrect on re-review rounds.
+
+The router owns the agent dispatch because subagents cannot spawn sub-subagents (they don't have access to the Agent tool). The review-coordination and verify-findings skills provide the classification, merge, and verification logic; the router executes them.
 
 ### SDLC loop
 
@@ -171,6 +175,7 @@ Start with Claude Code (interactive). When the ceiling is hit (need scheduling, 
 | release-notes | Generates release notes between tags | Plugin |
 | test-writer | Writes tests, finds coverage gaps | Plugin |
 | test-verifier | Verifies PR test plans, runs tests, drives browser for UI checks | Plugin |
+| verifier | Adversarial verifier for exactly one finding; refutes or confirms with evidence | Plugin |
 | docs | Documentation writing and updating | Plugin |
 | worktree-worker | Self-contained implement-to-PR in an isolated worktree, for parallel dispatch | Plugin |
 
@@ -187,6 +192,7 @@ Note: subagents cannot spawn sub-subagents (no access to the Agent tool). The ro
 | pluck | Claim unassigned issues from the repo backlog | none |
 | doc-sync | Verify and fix documentation accuracy against actual repo contents | none |
 | review-coordination | Coordinates multi-specialist PR review fanout | none |
+| verify-findings | Adversarial verification of Critical/Important findings before presenting or posting | none |
 | merge-gate | Pre-merge safety checks before any merge | none |
 | worktree-recovery | Recovers in-progress worktree workers before dispatching new ones | none |
 | parallel-ship | Dispatches multiple worktree-workers in parallel for multi-issue ship | `<issues>` |
