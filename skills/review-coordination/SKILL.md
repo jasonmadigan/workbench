@@ -49,6 +49,25 @@ done
 
 If any recent commit on main addresses the same issue, close the PR with a comment crediting the author and pointing to the commit that fixed it.
 
+## Step 1.7: Classify the changes
+
+Before dispatching specialists, dispatch ONE read-only agent (`subagent_type: "Explore"` or `"general-purpose"`, no `name` parameter) to fetch and classify the diff. You never read the diff yourself.
+
+The classifier's prompt:
+- Fetch the diff via `gh pr diff <number>` or `gh api repos/{owner}/{repo}/pulls/{number}/files`
+- Classify each changed file into exactly one bucket, with a one-line reason per file:
+
+| Bucket | Contains |
+|-|-|
+| behaviour | logic, control flow, state, error handling, API behaviour |
+| types-mechanical | type annotations, signatures, renames, imports, formatting, generated code |
+| mixed | both; note which hunks are behaviour |
+| tests-docs | test and documentation changes |
+
+Wait for the classifier to return before dispatching specialists -- this step is sequential, then Step 2 runs in parallel. The classification feeds two places:
+- Each specialist dispatch prompt (Step 2)
+- The focus table at the top of the final review report (Step 3)
+
 ## Step 1.9: Gather prior review context (round 2+ only)
 
 On re-review (when Step 6 loops back with a round number > 1), fetch prior review context before dispatching agents. Skip this step entirely on the first review round.
@@ -75,6 +94,7 @@ Spawn ALL needed specialists simultaneously using the Agent tool with `subagent_
 Pass each agent:
 - The PR number
 - The full file list
+- The change classification from Step 1.7, with the instruction to weight attention to behaviour and mixed files
 - Instructions to read the diff via `gh pr diff <number>` and the PR description via `gh pr view <number>`
 
 **On round 2+, also pass each agent:**
@@ -97,10 +117,15 @@ When all specialists return, synthesise their findings into a single assessment.
 3. **Security** -- promote any Critical findings from security-auditor (if dispatched) to blockers.
 4. **Performance** -- pull from code-reviewer's performance findings or domain specialists.
 
-Then produce a verdict:
+Then produce a verdict. The focus table from Step 1.7 goes at the TOP so the human narrows what to look at:
 
 ```
 ## Review verdict: APPROVE | CHANGES REQUESTED | BLOCKED
+
+| Review focus | Files |
+|-|-|
+| focus: behaviour + mixed | [files, with behaviour hunks noted for mixed] |
+| skim: types-mechanical, tests-docs | [files] |
 
 ### Blockers (must fix)
 - [specialist: finding + file:line]
