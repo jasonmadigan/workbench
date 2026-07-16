@@ -1,11 +1,13 @@
 ---
 name: next
-description: Scans GitHub and Jira for actionable work. Shows issues assigned to you, PRs needing review, your open PRs and their status, and open Jira tickets. Use when the user asks "what's on?", "what should I work on?", or "what next?".
+description: Scans GitHub and Jira for actionable work, ranked by the repo's GitHub Projects (v2) board when one exists. Shows board-prioritised issues, issues assigned to you, PRs needing review, your open PRs and their status, and open Jira tickets. Use when the user asks "what's on?", "what should I work on?", or "what next?".
 ---
 
 # Next
 
 Scan GitHub and Jira to find actionable work. Invoke via `clawdio:next`.
+
+Where the repo's issues sit on an active GitHub Projects (v2) board, the board is the primary prioritisation signal: it carries deliberate sprint, priority, and status decisions. The raw issue/PR backlog is the fallback when no board exists.
 
 ## Step 1: Query GitHub
 
@@ -26,7 +28,86 @@ gh pr list --author @me --json number,title,updatedAt,url,reviewDecision --limit
 
 For "what's on everywhere" or "across all repos", drop `--repo` from the commands above and replace `gh pr list` with `gh search prs --author=@me --state=open`.
 
-## Step 2: Check component ownership
+## Step 2: Project boards
+
+Discover the board through the open issues' `projectItems`, not `repository.projectsV2` alone. The repo-level project list can be stale: in Kuadrant/kuadrant-console-plugin, `repository.projectsV2` returns only a closed "Backlog" project (#23), while every open issue's `projectItems` points at the live org-level board "Kuadrant" (#18). In the all-repos mode, run discovery per repo in scope.
+
+Project queries need the `project` (or `read:project`) token scope. If the GraphQL call fails with a scope error, say so in one line and fall back to the raw backlog rather than failing the scan.
+
+### Discover boards
+
+```bash
+gh api graphql -f query='
+query($owner: String!, $repo: String!) {
+  repository(owner: $owner, name: $repo) {
+    issues(first: 50, states: OPEN, orderBy: {field: UPDATED_AT, direction: DESC}) {
+      nodes {
+        number title updatedAt
+        assignees(first: 5) { nodes { login } }
+        projectItems(first: 3) {
+          nodes {
+            project {
+              number title closed
+              owner { ... on Organization { login } ... on User { login } }
+            }
+          }
+        }
+      }
+    }
+  }
+}' -f owner="${REPO%/*}" -f repo="${REPO#*/}"
+```
+
+Dedupe the projects across all issues and exclude any with `closed: true`. If no open project remains, skip the rest of this step silently: the raw backlog behaviour from step 1 stands and the output makes no mention of boards.
+
+### Discover fields
+
+Field names vary per board. Do not assume them:
+
+```bash
+gh project field-list <number> --owner <project-owner> --format json
+```
+
+Identify:
+
+- the status single-select (name matching Status; note the option order, the first column, e.g. Todo, is the "up next" state)
+- a priority single-select (Priority or similar; note the option order, e.g. MoSCoW Must > Should > Could)
+- an iteration field (Sprint) if present
+
+Kuadrant board #18, for reference: Status (Todo, In Progress, Ready For Review, In Review, Done), Priority (Must, Should, Could), Sprint (iteration), plus secondary fields (Team, Area, Estimate, Release). Other boards will differ. Tolerate the absence of any of these fields and rank with whatever exists.
+
+### Fetch item field values
+
+Query per-issue, not per-board. Org boards can hold hundreds of cross-repo items, so `issues -> projectItems -> fieldValueByName` scales with the repo while dumping the whole board does not. Extend the discovery query's `projectItems` selection with:
+
+```graphql
+projectItems(first: 3) {
+  nodes {
+    project { number }
+    status: fieldValueByName(name: "Status") {
+      ... on ProjectV2ItemFieldSingleSelectValue { name }
+    }
+    priority: fieldValueByName(name: "Priority") {
+      ... on ProjectV2ItemFieldSingleSelectValue { name }
+    }
+    sprint: fieldValueByName(name: "Sprint") {
+      ... on ProjectV2ItemFieldIterationValue { title startDate duration }
+    }
+  }
+}
+```
+
+Substitute the discovered field names into `fieldValueByName`.
+
+### Rank
+
+1. Current-sprint items first: the iteration whose `startDate` plus `duration` (days) spans today. Non-sprint items after.
+2. Within each: status Todo (or the board's first column), assigned to me or unassigned, ordered by the priority field's option order (Must > Should > Could > unset).
+3. In Progress items assigned to me are not new work. Surface them separately as already in flight, a WIP reminder.
+4. Ready For Review / In Review items where I am reviewer or author fold into the PR sections in step 6. Do not duplicate them in the board section.
+5. Done items and items on closed projects never appear.
+
+## Step 3: Check component ownership
 
 Check if the repo has a Kubernetes-style `OWNERS` file at the repo root:
 
@@ -52,7 +133,7 @@ Filter out any results already shown in step 1 (same PR/issue number). These go 
 
 If there is no `OWNERS` file, or the user is not listed, skip this step silently.
 
-## Step 3: Repo activity
+## Step 4: Repo activity
 
 Regardless of `OWNERS`, check for open PRs in the repo that need attention. These are PRs not authored by the user that have no reviews yet:
 
@@ -64,13 +145,13 @@ Filter the `gh pr list` output to PRs where:
 - `author.login` is not the current user (compare against `gh api user --jq '.login'`)
 - `reviewDecision` is empty or `REVIEW_REQUIRED` (no reviews submitted yet)
 
-Exclude any PRs already captured in step 1 or step 2.
+Exclude any PRs already captured in step 1 or step 3.
 
 These go into a **Repo activity** section. This catches PRs on small teams where explicit review requests aren't always used.
 
 If no unreviewed PRs from others exist, skip this section silently.
 
-## Step 4: Query Jira
+## Step 5: Query Jira
 
 If the Atlassian MCP server is available (check for `mcp__atlassian__jira_search`), run two queries:
 
@@ -100,26 +181,27 @@ When scoping results to the current repo, use this mapping to filter relevant Ji
 
 If the current repo is in the Kuadrant org, include CONNLINK tickets. For repos not in this mapping, show all Jira tickets without org filtering.
 
-## Step 5: Format output
+## Step 6: Format output
 
 Present results in markdown tables. Group by priority (highest first):
 
-1. **Address feedback** -- my PRs where `reviewDecision` is `CHANGES_REQUESTED`. Invoke `clawdio:ship --resume` to fix.
-2. **Review** -- PRs requesting my review. Open with `gh pr view <number>`.
-3. **Merge** -- my PRs where `reviewDecision` is `APPROVED`. Merge with `gh pr merge <number> --squash`.
-4. **My PRs** -- my open PRs where `reviewDecision` is `REVIEW_REQUIRED`
-5. **Implement** -- GitHub issues assigned to me. Invoke `clawdio:ship #<number>` to start.
-6. **Backlog** -- unassigned issues in this repo. Only shown when no issues are assigned to me. Invoke `clawdio:ship #<number>` to pick up, or `clawdio:pluck` to claim without implementing.
-7. **Component owner** -- open PRs and unassigned issues in repos where I am an `OWNERS` approver/reviewer
-8. **Repo activity** -- open PRs from others with no reviews yet
-9. **Jira** -- open Jira tickets assigned to me
+1. **Board** -- only when step 2 found an open board. Head the section with the board, e.g. `board: Kuadrant (#18)`. List the ranked items with status, priority, and sprint annotations, then any already-in-flight items (In Progress, assigned to me) beneath as a WIP reminder.
+2. **Address feedback** -- my PRs where `reviewDecision` is `CHANGES_REQUESTED`. Invoke `clawdio:ship --resume` to fix.
+3. **Review** -- PRs requesting my review. Open with `gh pr view <number>`.
+4. **Merge** -- my PRs where `reviewDecision` is `APPROVED`. Merge with `gh pr merge <number> --squash`.
+5. **My PRs** -- my open PRs where `reviewDecision` is `REVIEW_REQUIRED`
+6. **Implement** -- GitHub issues assigned to me. Invoke `clawdio:ship #<number>` to start. Where an issue is a board item, annotate its status and priority inline from the step 2 data; no extra calls.
+7. **Backlog** -- unassigned issues in this repo. Only shown when no issues are assigned to me. Invoke `clawdio:ship #<number>` to pick up, or `clawdio:pluck` to claim without implementing.
+8. **Component owner** -- open PRs and unassigned issues in repos where I am an `OWNERS` approver/reviewer
+9. **Repo activity** -- open PRs from others with no reviews yet
+10. **Jira** -- open Jira tickets assigned to me
 
-Skip sections with no results. Omit empty tables entirely.
+Skip sections with no results. Omit empty tables entirely. When no open board exists, the output has no board section, no annotations, and no mention of boards.
 
 Every table uses three columns. Build the first column as a markdown link from the `url` field returned by `gh`. Example row: `| [#30](https://github.com/org/repo/issues/30) | Title here | detail |`
 
 For Jira tickets, build the link from the issue key: `| [PROJ-123](https://site.atlassian.net/browse/PROJ-123) | Title | status, priority |`
 
-## Step 6: Recommend next action
+## Step 7: Recommend next action
 
-Suggest what to tackle first. Offer to invoke `clawdio:ship` on the top item or open it with `gh issue view <number>` / `gh pr view <number>`.
+Suggest what to tackle first. When a board exists, the top-ranked board item is the default suggestion. Offer to invoke `clawdio:ship` on the top item or open it with `gh issue view <number>` / `gh pr view <number>`.
