@@ -33,7 +33,7 @@ docs/            docs/architecture.md, docs/contributing.md, docs/references.md
 | `agents/router.md` | entry point -- classifies tasks, dispatches to specialist agents |
 | `agents/worktree-worker.md` | isolated implementation agent for shipping issues via worktrees |
 | `skills/ship/SKILL.md` | full lifecycle skill: implement, push, PR, self-review, merge-prep |
-| `skills/next/SKILL.md` | scans GitHub and Jira for actionable work |
+| `skills/next/SKILL.md` | scans GitHub and Jira for actionable work, ranked by project boards where present |
 | `skills/pluck/SKILL.md` | claim unassigned issues from the repo backlog |
 | `skills/issues/SKILL.md` | GitHub issue lifecycle: create, update, link PRs, manage state |
 | `skills/pr-description/SKILL.md` | PR body template and conventions |
