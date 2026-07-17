@@ -77,6 +77,7 @@ All externally-visible comments (PR reviews, issue comments, state updates) foll
 
 - [agent-skills](https://github.com/addyosmani/agent-skills) plugin -- invoke via `agent-skills:<skill>` for security, code review, TDD, debugging, git workflow
 - [dev-team-plugin](https://github.com/kuadrant/dev-team-plugin) plugin -- invoke via `kdt:<skill>` for design docs, feature lifecycle, Go PR review
+- [edge-tooling](https://github.com/openshift-eng/edge-tooling) marketplace -- installed plugins: `challenge` (adversarial hypothesis review), `git-commits` (small-commits structuring), `pr-review` (yolo-agent, vet-review, coderabbit triage), `github` (pr-queue), `skills-review` (skill linting), `threat-model`, `edge-scrum`
 - `gh` CLI (authenticated) -- verify with `gh auth status`
 - GitHub MCP server -- provides `mcp__github__*` tools for issue/PR comment threads
 - [Atlassian MCP](https://github.com/sooperset/mcp-atlassian) -- provides `mcp__atlassian__jira_*` tools for Jira integration (optional)
