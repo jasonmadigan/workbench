@@ -170,7 +170,7 @@ graph TD
 
 **"Pluck"** -- invokes the `pluck` skill. Shows unassigned issues in the current repo. Pick ones to claim without starting implementation.
 
-**"What's on?"** -- invokes the `next` skill. Queries GitHub for issues, PRs, and feedback in the current repo, ranked by the project board when one exists. Returns a prioritised table.
+**"What's on?"** -- invokes the `next` skill. Queries GitHub for issues, PRs, and feedback in the current repo, ranked by the project board (or a saved team view of it) when one exists. Returns a prioritised table.
 
 **"Ship #42"** -- invokes the `ship` skill. Implements, pushes, creates PR, self-reviews, fixes findings, reports back.
 
@@ -212,7 +212,7 @@ Clawdio provides its own skills for SDLC orchestration. For cross-cutting develo
 
 | Skill | Trigger | Args | Purpose |
 |-|-|-|-|
-| next | "what's on?", "what next?" | none | Scans GitHub and Jira for issues, PRs, and feedback across repos, ranked by project boards where present |
+| next | "what's on?", "what next?", "next project issues?" | none | Scans GitHub and Jira for issues, PRs, and feedback across repos, ranked by project boards or saved team views where present |
 | ship | "ship #42" | `<issue>`, `--resume`, `--skip-review`, `--ready` | Full lifecycle: implement > push > draft PR > self-review > fix |
 | pluck | "pluck", "claim issue", "grab issue" | none | Claim unassigned issues from the repo backlog without implementing |
 | pr-description | Creating a PR | none | PR body template: summary, linked issue, test evidence |

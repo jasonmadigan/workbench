@@ -1,6 +1,6 @@
 ---
 name: next
-description: Scans GitHub and Jira for actionable work, ranked by the repo's GitHub Projects (v2) board when one exists. Shows board-prioritised issues, issues assigned to you, PRs needing review, your open PRs and their status, and open Jira tickets. Use when the user asks "what's on?", "what should I work on?", or "what next?".
+description: Scans GitHub and Jira for actionable work, ranked by the repo's GitHub Projects (v2) board, or a saved team view of it, when one exists. Shows board-prioritised issues, issues assigned to you, PRs needing review, your open PRs and their status, and open Jira tickets. Use when the user asks "what's on?", "what should I work on?", "what next?", or "next project issues?".
 ---
 
 # Next
@@ -60,6 +60,52 @@ query($owner: String!, $repo: String!) {
 
 Dedupe the projects across all issues and exclude any with `closed: true`. If no open project remains, skip the rest of this step silently: the raw backlog behaviour from step 1 stands and the output makes no mention of boards.
 
+### Saved team views
+
+Teams often work from a filtered view of the board, not the raw item list. When the user references a view (an `/orgs/<org>/projects/<n>/views/<m>` URL, or a phrase like "the team view"), reproduce that view. The per-issue scan below structurally cannot: views filter on board fields and aggregate items across repos.
+
+The view's filter string is exposed via GraphQL:
+
+```bash
+gh api graphql -f query='
+query {
+  organization(login: "<org>") {
+    projectV2(number: <board>) {
+      view(number: <view>) { name filter layout }
+    }
+  }
+}'
+```
+
+Parse the filter tokens: `field:"value"` is single-select equality, `sprint:@current` is the iteration whose start date plus duration spans today, a leading `-` negates, bare words match title text. Then page the board items and filter client-side, requesting `fieldValueByName` for every field named in the filter plus Status and Sprint:
+
+```bash
+gh api graphql --paginate -f query='
+query($endCursor: String) {
+  organization(login: "<org>") {
+    projectV2(number: <board>) {
+      items(first: 100, after: $endCursor) {
+        pageInfo { hasNextPage endCursor }
+        nodes {
+          type
+          status: fieldValueByName(name: "Status") { ... on ProjectV2ItemFieldSingleSelectValue { name } }
+          sprint: fieldValueByName(name: "Sprint") { ... on ProjectV2ItemFieldIterationValue { title startDate duration } }
+          content {
+            ... on Issue { number title state repository { name } assignees(first: 5) { nodes { login } } }
+            ... on PullRequest { number title state repository { name } }
+            ... on DraftIssue { title }
+          }
+        }
+      }
+    }
+  }
+}'
+```
+
+Items-side paging is the point here: a view is cross-repo (Kuadrant view 41 mixes kuadrant-console-plugin, kuadrant-backstage-plugin and developer-portal-controller items), so walking one repo's issues can never reproduce it. A few hundred items paginate fine; this path is only taken when a view is in play.
+
+Rank view items by Status column order, assigned-to-me or unassigned first within each column. Surface open items only: board views usually show a Done column, never list it. When a view drove the selection, head the board section with the view and skip the per-issue scan.
+
 ### Discover fields
 
 Field names vary per board. Do not assume them:
@@ -74,7 +120,7 @@ Identify:
 - a priority single-select (Priority or similar; note the option order, e.g. MoSCoW Must > Should > Could)
 - an iteration field (Sprint) if present
 
-Kuadrant board #18, for reference: Status (Todo, In Progress, Ready For Review, In Review, Done), Priority (Must, Should, Could), Sprint (iteration), plus secondary fields (Team, Area, Estimate, Release). Other boards will differ. Tolerate the absence of any of these fields and rank with whatever exists.
+Kuadrant board #18, for reference: Status (Todo, In Progress, Ready For Review, In Review, Done), Priority (Must, Should, Could), Sprint (iteration), plus secondary fields (Team, Area, Estimate, Release). In practice Priority is unset on UI-team items there, so rank those by Sprint and Status; the operative team field is Area, and view 41 ("UI Touchgrass Team", `area:"UI Touch Grass" sprint:@current`) is the UI team's working lens. Other boards will differ. Tolerate the absence of any of these fields and rank with whatever exists.
 
 ### Fetch item field values
 
@@ -185,7 +231,7 @@ If the current repo is in the Kuadrant org, include CONNLINK tickets. For repos 
 
 Present results in markdown tables. Group by priority (highest first):
 
-1. **Board** -- only when step 2 found an open board. Head the section with the board, e.g. `board: Kuadrant (#18)`. List the ranked items with status, priority, and sprint annotations, then any already-in-flight items (In Progress, assigned to me) beneath as a WIP reminder.
+1. **Board** -- only when step 2 found an open board. Head the section with the board, e.g. `board: Kuadrant (#18)`, or with the view when one drove the selection, e.g. `board: Kuadrant (#18), view: UI Touchgrass Team (area:"UI Touch Grass" sprint:@current)`, so the lens applied is always visible. List the ranked items with status, priority, and sprint annotations, then any already-in-flight items (In Progress, assigned to me) beneath as a WIP reminder.
 2. **Address feedback** -- my PRs where `reviewDecision` is `CHANGES_REQUESTED`. Invoke `clawdio:ship --resume` to fix.
 3. **Review** -- PRs requesting my review. Open with `gh pr view <number>`.
 4. **Merge** -- my PRs where `reviewDecision` is `APPROVED`. Merge with `gh pr merge <number> --squash`.
