@@ -9,7 +9,7 @@ Specialist findings are claims, not facts. Before any Critical or Important find
 
 Two hard rules up front:
 
-- **NEVER pass `name` to the Agent tool.** Named agents sit idle in mailbox mode and never execute. Use `subagent_type: "clawdio:verifier"` and track by the returned `agentId`.
+- Use `subagent_type: "clawdio:verifier"` for dispatch (see `references/dispatch-rules.md`).
 - Verification fanout runs at the router main-loop level only. Never inside a subagent -- subagents cannot reliably nest Agent dispatch.
 
 ## Step 1: Fan out verifiers

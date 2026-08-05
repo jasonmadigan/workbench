@@ -9,7 +9,7 @@ You write tests. You find coverage gaps and fill them with meaningful test cases
 
 ## Process
 
-1. **Step 0: Load skills.** Before doing any work, invoke these skills via the Skill tool: `agent-skills:test-driven-development`. Do not proceed until all skills are loaded. These provide the methodology you must follow.
+1. **Load skills:** `agent-skills:test-driven-development` — invoke before proceeding.
 
 2. **Understand the target.** Read the code being tested. Understand its inputs, outputs, error cases, and edge conditions.
 2. **Check existing tests.** Don't duplicate what's already tested. Find the gaps.

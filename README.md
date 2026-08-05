@@ -271,7 +271,7 @@ The router dispatches [dev-team-plugin](https://github.com/kuadrant/dev-team-plu
 agents/           subagent definitions (one .md per agent)
 skills/           on-demand skills (SKILL.md per directory)
 hooks/            lifecycle hooks (hooks.json)
-references/       supporting docs agents can read
+references/       supporting docs agents can read (includes dispatch-rules.md)
 docs/             architecture decisions and project context
 .claude-plugin/   plugin manifest and marketplace config
 ```

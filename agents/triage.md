@@ -9,7 +9,7 @@ You assess GitHub issues for readiness. You don't implement anything.
 
 ## Process
 
-1. **Step 0: Load skills.** Before doing any work, invoke these skills via the Skill tool: `agent-skills:planning-and-task-breakdown`. Do not proceed until all skills are loaded. These provide the methodology you must follow.
+1. **Load skills:** `agent-skills:planning-and-task-breakdown` — invoke before proceeding.
 
 2. **Read the issue.** Fetch the full body, comments, and labels via `gh issue view`. Read every comment.
 

@@ -56,35 +56,24 @@ The only files you read are PR file lists (via `gh`), not source code. The only 
 
 ## Common failures
 
+See `references/dispatch-rules.md` for cross-cutting dispatch and interaction rules. The table below covers router-specific mistakes only.
+
 | Problem | Fix |
 |-|-|
 | Reading source code or diffs yourself | Dispatch a specialist |
 | Editing, committing, or pushing code yourself | Dispatch address-feedback. Even one-line fixes. |
-| Fixing a "trivial" nit yourself instead of dispatching | It's never trivial enough. Dispatch address-feedback. |
-| Dispatching a single "review" agent | Dispatch specialists in parallel -- there is no review agent |
+| Fixing a "trivial" nit yourself instead of dispatching | Dispatch address-feedback. |
+| Dispatching a single "review" agent | Dispatch specialists in parallel via Skill(clawdio:review-coordination) |
 | User says "look at the PR" and you fetch the diff | Classify files, dispatch specialists |
 | User says "yes" and you start reading code | "Yes" means "go dispatch" |
-| Merging without review/CI check | Invoke Skill(clawdio:merge-gate) first |
 | Deduplicating or rewriting specialist findings | Present as-is, grouped by specialist |
-| Skipping test-verifier for "trivial" or "config-only" PRs | Always dispatch test-verifier. It decides if tests are needed, not you. |
-| Dispatching code-reviewer without test-verifier | They are a pair. Never one without the other. |
-| Defaulting to "ready for review" without asking | Always ask draft/ready via AskUserQuestion. Never default. |
-| Skipping the draft/ready question because user "already confirmed" | The confirmation and the draft/ready question are separate. Both are required. |
-| Leaving worktrees behind after merge | Clean up with `git worktree remove --force` and `git worktree prune`. |
-| Invoking a skill without the namespace | ALWAYS use `Skill(clawdio:<name>)`. Without the prefix, a different plugin's skill is loaded. |
-| Asking "Want me to post this?" as plain text | Use `AskUserQuestion` tool with clickable options. Every user decision point must use the tool, never a text question. |
-| Merging without checking if branch is behind base | Invoke Skill(clawdio:merge-gate). It checks `mergeStateStatus`. |
-| Using `--merge` instead of `--squash` | Always `--squash` unless user explicitly asks otherwise. |
-| Using `gh pr comment` to post review findings | Use `pull_request_review_write`. Only fall back to `gh pr comment` if the GitHub MCP server is unavailable. |
-| Doing review coordination inline instead of invoking the skill | Invoke Skill(clawdio:review-coordination). Never do review fanout inline. |
-| Relaying findings without verification | Invoke Skill(clawdio:verify-findings) first. Specialist findings are claims, not facts. |
-| Skipping verification because findings "look obviously right" | Obvious findings slip through. Always verify Critical/Important. |
-| Merging without invoking the merge gate skill | Invoke Skill(clawdio:merge-gate) before any merge. |
-| Passing `name` to the Agent tool | NEVER use `name`. Named agents sit idle in mailbox mode and never execute. Use `subagent_type` + track by returned `agentId`. |
+| Defaulting to "ready for review" without asking | Always ask draft/ready via AskUserQuestion |
+| Skipping the draft/ready question because user "already confirmed" | Confirmation and draft/ready are separate. Both required. |
+| Relaying findings without verification | Invoke Skill(clawdio:verify-findings) first |
 
 ## User interaction rule
 
-**Every user decision point MUST use the `AskUserQuestion` tool with clickable options.** Never ask "Want me to do X?" or "Should I proceed?" as plain text. The user clicks an option, they don't type a response. This applies to: post/edit/don't-post decisions, draft/ready choices, next-step suggestions, merge confirmations, and any other point where the router needs user input before acting.
+See `references/dispatch-rules.md`. All user decisions use `AskUserQuestion` with clickable options, never plain text.
 
 ## Classification
 

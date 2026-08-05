@@ -45,7 +45,6 @@ Do NOT git-commit this file. It is orchestrator-internal.
 Before starting a new workflow, check for existing state in this order:
 
 1. Check for `.clawdio-state` in the current directory
-2. Check for `memory/workflow_ship_*.md` files
 
 If state is found:
 - If `--resume` was passed, resume from the recorded phase
@@ -85,7 +84,7 @@ Report the inferred state to the user before proceeding.
    ```bash
    gh issue edit <number> --add-assignee "@me" --add-label "in-progress"
    ```
-2. Dispatch the implement agent on the issue using `subagent_type: "clawdio:implement"`. **Do NOT pass `name`** -- named agents sit idle and never execute. Wait for completion.
+2. Dispatch the implement agent using `subagent_type: "clawdio:implement"`. Wait for completion.
 
 - [ ] All tests pass
 - [ ] Implementation matches acceptance criteria
@@ -175,27 +174,7 @@ Skip this phase if `--skip-review` was passed.
 ### Phase 6: Report
 
 14. Tell the user: PR is ready for team review. Link to the PR. Include CI status.
-15. Delete the state file from memory. Remove from MEMORY.md index.
-
-## ## State file
-
-Written after each phase gate. Path: `memory/workflow_ship_<branch>.md`
-
-```markdown
----
-name: workflow_ship_<branch>
-description: Active ship workflow for <issue> on <branch>
-type: project
----
-
-- phase: implementing | pre-ship | pushing | reviewing | complete | blocked
-- issue: <ref>
-- branch: <name>
-- pr: <url or pending>
-- last-updated: <ISO date>
-```
-
-Add to `MEMORY.md` index when created. Remove from `MEMORY.md` on completion or when starting fresh.
+15. Delete `.clawdio-state`.
 
 ## Decision tree: merge or wait?
 

@@ -9,7 +9,7 @@ You fix PR review comments. You read the feedback, make the changes, and commit.
 
 ## Process
 
-1. **Step 0: Load skills.** Before doing any work, invoke these skills via the Skill tool: `agent-skills:debugging-and-error-recovery`, `agent-skills:incremental-implementation`, `agent-skills:git-workflow-and-versioning`. Do not proceed until all skills are loaded. These provide the methodology you must follow.
+1. **Load skills:** `agent-skills:debugging-and-error-recovery`, `agent-skills:incremental-implementation`, `agent-skills:git-workflow-and-versioning` — invoke all before proceeding.
 
 2. **Fetch the review.** Use `gh pr view` and the GitHub MCP to get all review comments, inline comments, and conversation threads.
 

@@ -89,7 +89,7 @@ This summary is passed to agents in Step 2.
 
 ## Step 2: Dispatch in parallel
 
-Spawn ALL needed specialists simultaneously using the Agent tool with `subagent_type`. **NEVER pass `name` to the Agent tool** -- named agents sit idle in mailbox mode and never execute their prompt. Track agents by the `agentId` returned in each response.
+Spawn all needed specialists simultaneously using the Agent tool with `subagent_type` (see `references/dispatch-rules.md`). Track agents by the returned `agentId`.
 
 Pass each agent:
 - The PR number
@@ -117,7 +117,9 @@ When all specialists return, synthesise their findings into a single assessment.
 3. **Security** -- promote any Critical findings from security-auditor (if dispatched) to blockers.
 4. **Performance** -- pull from code-reviewer's performance findings or domain specialists.
 
-Then produce a verdict. The focus table from Step 1.7 goes at the TOP so the human narrows what to look at:
+Then produce a verdict. The focus table from Step 1.7 goes at the TOP so the human narrows what to look at.
+
+**All findings go as inline comments on the diff. The review body is the verdict and focus table only.** Do not duplicate findings in the body. Nits are excluded unless the user explicitly asked for them.
 
 ```
 ## Review verdict: APPROVE | CHANGES REQUESTED | BLOCKED
@@ -126,15 +128,6 @@ Then produce a verdict. The focus table from Step 1.7 goes at the TOP so the hum
 |-|-|
 | focus: behaviour + mixed | [files, with behaviour hunks noted for mixed] |
 | skim: types-mechanical, tests-docs | [files] |
-
-### Blockers (must fix)
-- [specialist: finding + file:line]
-
-### Should fix
-- [specialist: finding + file:line]
-
-### Nits (author's call)
-- [specialist: finding]
 ```
 
 If any specialist returned a Critical finding, the default verdict is CHANGES REQUESTED.
@@ -149,7 +142,7 @@ Before presenting or posting anything, invoke `Skill(clawdio:verify-findings)` o
 
 ## Step 4: Post to GitHub
 
-Present the draft to the user. Follow the comment style from CLAUDE.md: terse, no preamble, no sign-offs, severity labels with file:line refs. Start with the verdict, then findings. Nothing else.
+Present the draft to the user. Follow the comment style from CLAUDE.md: inline comments only, one sentence per finding, no body duplication.
 
 **MUST use `AskUserQuestion` tool** to present the draft. Options: "Post as-is", "Edit first", "Don't post". Do NOT ask "Want me to post this?" as plain text. Do NOT post without explicit approval via the tool. The user clicks an option, not types a response.
 
@@ -170,12 +163,12 @@ gh api repos/{owner}/{repo}/pulls/{number}/reviews --method POST --input - <<'EO
 {
   "commit_id": "<commit_sha>",
   "event": "REQUEST_CHANGES",
-  "body": "## Review verdict: CHANGES REQUESTED\n\n### Blockers\n- ...\n\n### Should fix\n- ...\n\n(plus any findings that reference lines outside the diff)",
+  "body": "## Review verdict: CHANGES REQUESTED\n\n| Review focus | Files |\n|-|-|\n| focus: behaviour + mixed | ... |\n| skim: types-mechanical, tests-docs | ... |",
   "comments": [
     {
       "path": "internal/broker/broker.go",
       "line": 42,
-      "body": "**Critical:** unchecked nil dereference on error path"
+      "body": "**Critical:** unchecked nil dereference on error path. Guard `err != nil` before access."
     }
   ]
 }
@@ -184,8 +177,8 @@ EOF
 
 Rules:
 - `event`: `"REQUEST_CHANGES"` when verdict is CHANGES REQUESTED or BLOCKED. `"COMMENT"` when APPROVE.
-- `body`: the verdict summary (blockers, should-fix, nits) plus any findings that reference lines NOT in the diff. GitHub rejects inline comments on lines outside the diff, so those go here. Append the collapsed "Filtered out by verification" section from Step 3.5 if any findings were refuted.
-- `comments`: array of inline findings. Each needs `path`, `line` (line number in the NEW file from the diff hunk headers), and `body`.
+- `body`: verdict line + focus table ONLY. No findings in the body. Exception: findings that reference lines outside the diff go in the body because GitHub rejects inline comments on lines not in the diff. Append the collapsed "Filtered out by verification" section from Step 3.5 if any findings were refuted.
+- `comments`: array of inline findings. Each needs `path`, `line` (line number in the NEW file from the diff hunk headers), and `body`. One sentence: severity label, problem, fix. No nits unless user asked.
 - `commit_id`: the head SHA fetched above. Required.
 
 ## Step 5: Suggest next action

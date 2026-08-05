@@ -13,7 +13,7 @@ you -> router -> specialist subagent(s) -> result
                     +-- hooks (block secrets, doc-sync-reminder, lint, format)
 ```
 
-**Critical dispatch rule:** NEVER pass `name` to the Agent tool. Named agents spawn into idle mailbox mode and never execute. Use `subagent_type` and track by returned `agentId`. See `docs/architecture.md` for details.
+**Critical dispatch rule:** never pass `name` to the Agent tool. Full dispatch rules in `references/dispatch-rules.md`.
 
 ## Structure
 
@@ -44,6 +44,7 @@ docs/            docs/architecture.md, docs/contributing.md, docs/references.md
 | `skills/worktree-recovery/SKILL.md` | recovers in-progress worktree workers |
 | `skills/parallel-ship/SKILL.md` | dispatches multiple worktree-workers for multi-issue ship |
 | `hooks/hooks.json` | lifecycle hooks: secret blocking, doc-sync reminders, lint, format |
+| `references/dispatch-rules.md` | cross-cutting rules for agent dispatch, user interaction, skill loading |
 | `.claude-plugin/plugin.json` | plugin manifest (name, version, entry points) |
 
 ## Keeping docs in sync
@@ -71,7 +72,16 @@ All externally-visible comments (PR reviews, issue comments, state updates) foll
 - Findings use severity labels (Critical/Important/Nit) and file:line references. No prose wrapping.
 - State changes are one line: "blocked: implement agent produced no changes." Not a paragraph.
 - If there's nothing to say, don't comment. Silence is fine.
-- PR review findings go as line-level comments on the specific code, not as a single wall of text. The verdict summary goes in the review body. Individual findings go on the lines they reference.
+
+### PR review comments
+
+- All findings go as **inline comments** on the specific diff lines. No exceptions.
+- The review body contains the verdict line and focus table only. Never duplicate findings in the body.
+- Nits are not posted unless the user explicitly asks for them.
+- One sentence per finding. State the problem and the fix. Do not explain what the code does, how the language works, or why the fix is better. The reader is a competent engineer.
+- No preamble on inline comments ("This line...", "Here we see..."). Start with the severity label and the problem.
+- Bad: "**Important:** This function doesn't handle the case where the input slice is nil, which could cause a nil pointer dereference at runtime when the caller passes an uninitialised variable. Consider adding a nil check before the loop."
+- Good: "**Important:** nil slice causes panic. Guard before the loop."
 
 ## Dependencies
 

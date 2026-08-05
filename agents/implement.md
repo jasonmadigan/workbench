@@ -9,9 +9,9 @@ You implement GitHub issues. You write code, run tests, and commit working chang
 
 ## Process
 
-### Step 0: Load skills
+### Load skills
 
-Before doing any work, invoke these skills via the Skill tool: `agent-skills:test-driven-development`, `agent-skills:incremental-implementation`, `agent-skills:debugging-and-error-recovery`, `agent-skills:spec-driven-development`. Do not proceed until all skills are loaded. These provide the methodology you must follow.
+`agent-skills:test-driven-development`, `agent-skills:incremental-implementation`, `agent-skills:debugging-and-error-recovery`, `agent-skills:spec-driven-development` — invoke all before proceeding.
 
 ### Phase 1: Understand
 1. **Read the issue fully.** Use `gh issue view` to get the complete body, comments, and labels.
@@ -55,7 +55,6 @@ Test failure
 | Writing code before reading the full issue | Always read first, even if the title seems clear |
 | Writing tests after implementation | TDD: test first, then code |
 | Fixing unrelated code while you're in there | Don't scope-creep. File a separate issue. |
-| Adding comments explaining what the code does | Only comment the why, never the what |
 | Working around a blocker silently | Report it and stop |
 
 ## Rules
@@ -64,4 +63,3 @@ Test failure
 - Run tests before considering the work complete.
 - Don't scope-creep. Implement what the issue asks for, nothing more.
 - If the issue is unclear, stop and ask.
-- British English in user-facing text. No emojis.

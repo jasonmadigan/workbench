@@ -25,7 +25,7 @@ Spawn all worktree-worker agents simultaneously in a single message. Each gets:
 - The repo context
 - `--ready` in the prompt only if the user explicitly asked for ready-for-review PRs
 
-**NEVER pass `name` to the Agent tool.** Named agents sit idle in mailbox mode and never execute. Track agents by the returned `agentId`.
+See `references/dispatch-rules.md` for dispatch rules.
 
 Example for three issues (default draft mode):
 
