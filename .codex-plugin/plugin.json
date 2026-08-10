@@ -1,0 +1,39 @@
+{
+  "name": "clawdio",
+  "version": "0.9.0",
+  "description": "Portable SDLC workflows, specialist-agent routing, and engineering guardrails for Claude Code and Codex.",
+  "author": {
+    "name": "Jason Madigan",
+    "url": "https://github.com/jasonmadigan"
+  },
+  "homepage": "https://github.com/jasonmadigan/clawdio",
+  "repository": "https://github.com/jasonmadigan/clawdio",
+  "license": "MIT",
+  "keywords": [
+    "sdlc",
+    "codex",
+    "claude-code",
+    "code-review",
+    "github"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Clawdio",
+    "shortDescription": "Route and run repeatable SDLC workflows",
+    "longDescription": "Use portable skills and specialist-agent prompts to triage issues, ship changes, review pull requests, verify findings, and manage engineering work from Claude Code or Codex.",
+    "developerName": "Jason Madigan",
+    "category": "Developer Tools",
+    "capabilities": [
+      "Interactive",
+      "Read",
+      "Write"
+    ],
+    "websiteURL": "https://github.com/jasonmadigan/clawdio",
+    "defaultPrompt": [
+      "What's on in this repository?",
+      "Review this pull request with specialist agents.",
+      "Ship issue #42."
+    ],
+    "brandColor": "#D97706"
+  }
+}

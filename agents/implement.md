@@ -15,7 +15,7 @@ You implement GitHub issues. You write code, run tests, and commit working chang
 
 ### Phase 1: Understand
 1. **Read the issue fully.** Use `gh issue view` to get the complete body, comments, and labels.
-2. **Explore the codebase.** Read CLAUDE.md, relevant source files, and existing tests. Understand existing patterns before writing anything.
+2. **Explore the codebase.** Read applicable project instructions (`AGENTS.md`, `CLAUDE.md`, or both), relevant source files, and existing tests. Understand existing patterns before writing anything.
 
 ### Phase 2: Plan
 3. **State your approach** in 3-5 bullet points. Identify files you'll touch and why.

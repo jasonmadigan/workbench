@@ -2,6 +2,8 @@
 
 Structured interview conducted 2026-04-25 to understand actual workflows before designing the agent architecture.
 
+> This records the original decision context. Clawdio now supports both Claude Code and Codex; see `docs/architecture.md` for the current portability design.
+
 ## Key findings
 
 ### Work patterns

@@ -7,6 +7,9 @@ description: Claim unassigned issues from the repo backlog. Shows an interactive
 
 Claim unassigned issues from the current repo without implementing them. Invoke via `clawdio:pluck`.
 
+Read the user-decision rules in `../../references/dispatch-rules.md` before
+presenting the picker.
+
 ## Process
 
 ### Step 1: Detect context
@@ -38,7 +41,7 @@ Labels in parentheses after the title. Omit parentheses if no labels. Show relat
 
 ### Step 4: Multi-select
 
-Ask the user to pick issues. Use `AskUserQuestion` with `multiSelect: true`. Options are the numbered items from step 3.
+Ask the user to pick issues through the active client. Use multi-select when the client exposes it; otherwise accept comma-separated issue numbers. Options are the numbered items from step 3.
 
 ### Step 5: Assign
 

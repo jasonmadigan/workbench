@@ -1,13 +1,14 @@
 ---
 name: review-coordination
-description: Coordinates multi-specialist PR review. Invoked by the router when a PR needs review.
+description: Coordinates multi-specialist PR review. Use when the router receives a pull request review request.
 ---
 
 # Review Coordination
 
 Coordinates multi-specialist PR review. Invoked by the router when a PR needs review.
 
-Subagents cannot spawn their own subagents. The router owns the review fanout.
+Read `../../references/dispatch-rules.md` before dispatching or asking the user
+for a decision. The router owns the review fanout on every client.
 
 ## Step 1: Classify the PR
 
@@ -51,7 +52,7 @@ If any recent commit on main addresses the same issue, close the PR with a comme
 
 ## Step 1.7: Classify the changes
 
-Before dispatching specialists, dispatch ONE read-only agent (`subagent_type: "Explore"` or `"general-purpose"`, no `name` parameter) to fetch and classify the diff. You never read the diff yourself.
+Before dispatching specialists, dispatch ONE read-only classifier through the active client adapter to fetch and classify the diff. You never read the diff yourself.
 
 The classifier's prompt:
 - Fetch the diff via `gh pr diff <number>` or `gh api repos/{owner}/{repo}/pulls/{number}/files`
@@ -89,7 +90,7 @@ This summary is passed to agents in Step 2.
 
 ## Step 2: Dispatch in parallel
 
-Spawn all needed specialists simultaneously using the Agent tool with `subagent_type` (see `references/dispatch-rules.md`). Track agents by the returned `agentId`.
+Spawn all needed specialists simultaneously through the active client adapter.
 
 Pass each agent:
 - The PR number
@@ -102,11 +103,11 @@ Pass each agent:
 - The prior-review summary from Step 1.9
 - These instructions: "Prior review findings are listed below. Verify that flagged issues were addressed. Do not re-flag findings that have been resolved. Findings listed as refuted were checked by an adversarial verifier and found to be false positives -- do not re-raise them. Only raise genuinely new issues not covered by prior rounds."
 
-Example: for a Go PR with auth changes, dispatch four agents in parallel (no `name` parameter):
-- `subagent_type: "clawdio:code-reviewer"`
-- `subagent_type: "clawdio:test-verifier"`
-- `subagent_type: "clawdio:go-k8s-reviewer"`
-- `subagent_type: "clawdio:auth-reviewer"`
+Example: for a Go PR with auth changes, dispatch these four logical agents in parallel:
+- `code-reviewer`
+- `test-verifier`
+- `go-k8s-reviewer`
+- `auth-reviewer`
 
 ## Step 3: Collect, merge, and decide
 
@@ -134,7 +135,7 @@ If any specialist returned a Critical finding, the default verdict is CHANGES RE
 
 ## Step 3.5: Verify findings
 
-Before presenting or posting anything, invoke `Skill(clawdio:verify-findings)` on the merged Critical and Important findings. Nits pass through unverified. The skill fans out one verifier agent per finding (router main loop, in parallel) and returns a verdict for each.
+Before presenting or posting anything, invoke `clawdio:verify-findings` on the merged Critical and Important findings. Nits pass through unverified. The skill fans out one verifier agent per finding (router main loop, in parallel) and returns a verdict for each.
 
 - **Confirmed** and **plausible** findings proceed to Step 4 unchanged.
 - **Refuted** findings move out of the verdict sections into a collapsed "Filtered out by verification" section at the end of the review body, one-line refutation each. Never silently dropped.
@@ -142,9 +143,9 @@ Before presenting or posting anything, invoke `Skill(clawdio:verify-findings)` o
 
 ## Step 4: Post to GitHub
 
-Present the draft to the user. Follow the comment style from CLAUDE.md: inline comments only, one sentence per finding, no body duplication.
+Present the draft to the user. Follow the applicable project instructions (`AGENTS.md`, `CLAUDE.md`, or both): inline comments only, one sentence per finding, no body duplication.
 
-**MUST use `AskUserQuestion` tool** to present the draft. Options: "Post as-is", "Edit first", "Don't post". Do NOT ask "Want me to post this?" as plain text. Do NOT post without explicit approval via the tool. The user clicks an option, not types a response.
+Use the user-decision mechanism from the portability rules to present the full draft with options: "Post as-is", "Edit first", "Don't post". Do not post without explicit approval.
 
 Once approved, post using the protocol below.
 
@@ -183,22 +184,22 @@ Rules:
 
 ## Step 5: Suggest next action
 
-After posting, if the verdict is CHANGES REQUESTED or BLOCKED, offer next steps via `AskUserQuestion`:
+After posting, if the verdict is CHANGES REQUESTED or BLOCKED, offer next steps through the active user-decision mechanism:
 
 - "Address the feedback" → dispatch the **address-feedback** agent (NOT the router -- the router never fixes code)
-- "Merge anyway" → invoke Skill(clawdio:merge-gate)
+- "Merge anyway" → invoke `clawdio:merge-gate`
 - "Done for now" → stop
 
 If the verdict is APPROVE, offer:
-- "Merge" → invoke Skill(clawdio:merge-gate)
+- "Merge" → invoke `clawdio:merge-gate`
 - "Done for now" → stop
 
 The address-feedback agent reads the review comments, categorises them, fixes what it can, and reports what needs your input. The router NEVER addresses feedback itself.
 
 ## Step 6: After address-feedback completes
 
-When the address-feedback agent finishes, offer next steps via `AskUserQuestion`:
+When the address-feedback agent finishes, offer next steps through the active user-decision mechanism:
 
 - "Re-review" → run review coordination again (Step 1) with the round number incremented (first review = round 1, so first re-review = round 2, etc.). The round number triggers Step 1.9 to gather prior context before dispatch.
-- "Merge" → invoke Skill(clawdio:merge-gate)
-- "What's on" → invoke Skill(clawdio:next) to check for other work
+- "Merge" → invoke `clawdio:merge-gate`
+- "What's on" → invoke `clawdio:next` to check for other work

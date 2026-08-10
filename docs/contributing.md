@@ -1,19 +1,48 @@
 # Contributing
 
-How to add agents, skills, and hooks to clawdio.
+How to add agents, skills, and hooks without splitting the Claude Code and Codex implementations.
 
 ## Development workflow
 
-1. Edit files in the clawdio repo
-2. Test locally: `claude --plugin-dir /path/to/clawdio --agent clawdio:router`
-3. Reload without restarting: `/reload-plugins` inside an active session
-4. Commit, push, **bump version in plugin.json**, then: `claude plugin update clawdio@jasonmadigan-clawdio`
+1. Edit the canonical agent, skill, or hook implementation.
+2. If client mechanics changed, update `references/dispatch-rules.md`; do not copy workflow text into an adapter.
+3. Bump the version in both `.claude-plugin/plugin.json` and `.codex-plugin/plugin.json`.
+4. Run the validation suite below.
+5. Smoke-test the router in both clients before publishing.
 
-Version bumps are required for updates to be picked up. Use patch bumps (0.1.x) for iteration.
+```bash
+claude plugin validate --strict .
+python3 /path/to/plugin-creator/scripts/validate_plugin.py .
+python3 -m py_compile hooks/file_hook.py
+python3 -m unittest hooks/test_file_hook.py
+uvx skillsaw lint
+
+# Claude Code smoke test
+claude --plugin-dir /path/to/clawdio --agent clawdio:router
+
+# Codex smoke test through the local marketplace
+codex plugin marketplace add /path/to/clawdio
+codex plugin add clawdio@jasonmadigan-clawdio
+```
+
+Use the `plugin-creator` validator bundled with Codex; resolve its installed path locally rather than committing a machine-specific path. Claude Code can reload an active development session with `/reload-plugins`.
+
+## Portability and reuse
+
+There are four sources of truth:
+
+- `agents/*.md` for specialist behaviour
+- `skills/*/SKILL.md` for shared workflows
+- `references/dispatch-rules.md` for client adaptation and external capability resolution
+- `hooks/file_hook.py` for file-hook behaviour
+
+The manifests, `skills/router/SKILL.md`, and `hooks/hooks.json` must remain thin. Never paste an agent body into a Codex custom-agent TOML file or duplicate hook shell snippets per client.
+
+Third-party skill names express intent. Add their portable resolution and fallback once in `references/dispatch-rules.md`; do not vendor their instructions. A canonical agent must contain a usable baseline process so a provider can improve the workflow without making one client's package format a runtime requirement everywhere.
 
 ## Writing agents
 
-Agents are markdown files in `agents/`. One file per agent.
+Agents are canonical Markdown prompts in `agents/`, one file per agent. Claude Code discovers them directly. The Codex router supplies their resolved paths to built-in subagents.
 
 ### Format
 
@@ -90,10 +119,10 @@ Input
 - [ ] No unrelated changes
 ```
 
-**Cross-skill references** to agent-skills where relevant:
+**Cross-skill capability references** where an optional provider improves the baseline:
 
 ```markdown
-Invoke the `agent-skills:test` skill for TDD.
+Resolve the `agent-skills:test-driven-development` capability for TDD.
 ```
 
 ### Conventions
@@ -101,18 +130,18 @@ Invoke the `agent-skills:test` skill for TDD.
 - As short as possible, ideally. Every line should earn its place.
 - Process steps should be concrete actions, not vague guidance.
 - Rules should be things the agent would otherwise get wrong.
-- The description field is what Claude uses to decide when to dispatch this agent. Make it precise.
+- The description field informs Claude dispatch and documents Codex routing intent. Make it precise.
 - British English. No emojis. No AI-sounding prose.
 - Any agent that posts externally-visible comments (PR reviews, issue updates) must follow the comment style in CLAUDE.md. Terse, no preamble, no sign-offs, severity labels with file:line refs.
 
 ### Worktree-isolated agents
 
-Agents dispatched with `isolation: "worktree"` get their own git worktree. Conventions:
+Write-heavy agents run in an isolated git worktree when concurrent. Claude Code may provide isolation on dispatch; Codex workflows must create a separate worktree, pass its absolute path to the worker, verify the worker's repository root, or run serially. Conventions:
 
 - The agent must not `cd` outside its working directory or reference files in the main worktree.
 - Include a "Constraint: stay in your worktree" section at the top of the agent definition.
 - Use a structured output format (e.g. `RESULT: complete`, `PR_URL: ...`) so the router can parse results programmatically.
-- The agent cannot dispatch subagents (no Agent tool access). It can invoke skills.
+- The agent must not dispatch other agents. The router owns fanout.
 - Worktrees are preserved if the agent made changes, cleaned up if not. The agent does not manage its own worktree lifecycle.
 - Write `.clawdio-state` in the worktree root after every phase transition. This is how the router tracks progress and resumes failed workers. Never git-commit this file.
 
@@ -123,12 +152,13 @@ Agents dispatched with `isolation: "worktree"` get their own git worktree. Conve
 
 Rule of thumb: if it _does work_, it's an agent. If it _knows things_, it's a skill.
 
-### Subagent limitations
+### Dispatch ownership
 
-Subagents cannot spawn sub-subagents. They don't have access to the Agent tool. This means:
-- Only the router (top-level agent) can dispatch other agents
-- Agents that need to coordinate multiple specialists must be restructured so the router does the fanout
-- Subagents CAN invoke skills (skills load into context, they don't need the Agent tool)
+Only the router dispatches agents. This is an architectural invariant even when a client technically supports nested agents:
+
+- orchestration skills return a dispatch plan to the router
+- specialists do not spawn other specialists
+- specialists may load available skills through the resolver in `references/dispatch-rules.md`
 
 ## Writing skills
 
@@ -160,12 +190,12 @@ Common mistakes table.
 
 ### Skill arguments
 
-Skills can accept arguments via the Skill tool's `args` parameter, passed as a single string.
+Skills receive input from the current conversation. Claude Code may expose it as the Skill tool's `args` string; Codex may supply it through the invoking prompt.
 
 - Document accepted args in an **Arguments** section immediately after the skill heading, before the process.
 - Use a table: arg name, form (positional/flag/named), example.
 - Support both positional (`ship #42`) and named (`ship --issue #42`) where it makes sense.
-- The skill instructions tell Claude how to parse the args string. No framework needed.
+- The skill instructions parse common forms from either explicit arguments or conversation context. No client-specific parser is needed.
 - Args are for common cases. Complex orchestration should use conversation context.
 
 Example:
@@ -193,35 +223,41 @@ State file body should be simple key-value pairs: phase, issue, branch, PR URL, 
 
 ### Conventions
 
-- The description field drives automatic invocation. Be specific about trigger phrases.
+- The description field drives skill discovery in both clients. Be specific about trigger phrases.
 - Lead with the rule or action. Details and rationale below.
 - Skills are loaded into the caller's context window, so keep them focused.
-- Reference via `/clawdio:skill-name` in conversations.
+- Refer to the full namespaced identity (`clawdio:skill-name`) when the client displays namespaces.
 - Include output format examples that are exact, not suggestive. Agents interpret loose formats liberally.
 
 ## Writing hooks
 
-Hooks are defined in `hooks/hooks.json`. Deterministic shell commands at lifecycle events.
+Hooks are registered in `hooks/hooks.json`; portable behaviour lives in `hooks/file_hook.py`. Both clients execute the same script.
+
+The hook adapter supports Python 3.9 and newer and uses only the standard library.
 
 ### Lifecycle events
 
-- **PreToolUse**: runs before a tool executes. Exit code 2 blocks the tool.
-- **PostToolUse**: runs after a tool executes.
+- **PreToolUse**: runs before a matched edit. Exit code 2 blocks the tool.
+- **PostToolUse**: runs after a matched edit.
 
-### Available environment variables
+### Event input
 
-- `CLAUDE_FILE_PATH`: the file being written/edited (for Write/Edit matchers)
+- Claude Code can provide `CLAUDE_FILE_PATH` or `tool_input.file_path`.
+- Codex aliases `Write|Edit` to `apply_patch`; patch paths are in `tool_input.command`.
+- `file_hook.py` is the only place that should translate those forms.
+- Hook commands locate the plugin with `PLUGIN_ROOT`, falling back to the compatible `CLAUDE_PLUGIN_ROOT` variable.
 
 ### Conventions
 
 - Hooks must be fast. They run on every matching tool use.
 - Hooks must be deterministic. No LLM calls, no network requests.
-- Use `2>/dev/null` for optional tools. Missing prettier should fail silently.
-- Test by deliberately triggering: try writing to `.env` and verify it's blocked.
+- Optional formatters and linters must fail silently.
+- Unit-smoke the script with representative Claude and Codex JSON payloads, including a multi-file patch.
+- Deliberately target `.env` and verify exit code 2 before changing sensitive-path rules.
 
 ## Personal agent overrides
 
-Plugin agents can be overridden by placing a file with the same name in `~/.claude/agents/`. Personal agents take precedence.
+Claude Code plugin agents can be overridden by placing a file with the same name in `~/.claude/agents/`. Codex-specific project context belongs in `AGENTS.md`; installed equivalent skills may also augment a specialist.
 
 Use this for domain-specific reviewers that contain proprietary knowledge or team-specific conventions.
 
@@ -231,6 +267,6 @@ Use this for domain-specific reviewers that contain proprietary knowledge or tea
 - Skill names: lowercase, hyphenated directory name.
 - Keep names short. `review` not `pull-request-review-coordinator`.
 
-## Companion plugin
+## External capability providers
 
-[agent-skills](https://github.com/addyosmani/agent-skills) provides cross-cutting development skills (TDD, debugging, security hardening, code review, spec-driven development). Clawdio agents reference these skills where relevant. Install it alongside clawdio.
+[agent-skills](https://github.com/addyosmani/agent-skills) provides cross-cutting development skills; [dev-team-plugin](https://github.com/kuadrant/dev-team-plugin) provides feature-lifecycle workflows. Claude declares both as dependencies. Keep exact external names in canonical prompts, resolve equivalents centrally for other clients, and maintain local compositions for any externally routed workflow that clawdio promises to support.

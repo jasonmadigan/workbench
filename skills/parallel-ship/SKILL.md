@@ -1,39 +1,38 @@
 ---
 name: parallel-ship
-description: Dispatches multiple worktree-workers in parallel for multi-issue ship. Invoked by the router when multiple issues are referenced.
+description: Dispatches multiple worktree-workers for multi-issue shipping. Use when the router receives multiple issue references in one ship request.
 ---
 
 # Parallel Ship
 
 Dispatches multiple worktree-workers in parallel for multi-issue ship. Invoked by the router when multiple issues are referenced.
 
+Read `../../references/dispatch-rules.md` before dispatching or asking the user
+for a decision. In particular, do not run concurrent writers without isolated
+worktrees.
+
 ## Step 1: Confirm scope and PR type
 
-**Non-negotiable:** always use `AskUserQuestion` here, even if the user already said "ship" or "yes". The confirmation step cannot be skipped. Ask:
+**Non-negotiable:** always use the active client's user-decision mechanism here, even if the user already said "ship" or "yes". The confirmation step cannot be skipped. Ask:
 1. "Ship these N issues in parallel?" with options to proceed or adjust.
 
 PRs default to draft. Only pass `--ready` if the user explicitly asks for ready-for-review PRs.
 
 ## Step 2: Dispatch in parallel
 
-Invoke `Skill(clawdio:worktree-recovery)` first to check for in-progress work.
+Invoke `clawdio:worktree-recovery` first to check for in-progress work.
 
-Spawn all worktree-worker agents simultaneously in a single message. Each gets:
-- `subagent_type: "clawdio:worktree-worker"`
-- `isolation: "worktree"` (Claude Code creates a separate worktree per agent)
+Spawn all logical `worktree-worker` agents simultaneously through the active client adapter. Each gets:
+- a separate, verified git worktree
+- the worktree's absolute path and an instruction to use it as the working directory for every command when isolation was created manually
 - The issue reference (URL or number)
 - The repo context
 - `--ready` in the prompt only if the user explicitly asked for ready-for-review PRs
 
-See `references/dispatch-rules.md` for dispatch rules.
-
-Example for three issues (default draft mode):
-
-```
-Agent(subagent_type: "clawdio:worktree-worker", isolation: "worktree", prompt: "Implement issue #10 in <repo>.")
-Agent(subagent_type: "clawdio:worktree-worker", isolation: "worktree", prompt: "Implement issue #11 in <repo>.")
-Agent(subagent_type: "clawdio:worktree-worker", isolation: "worktree", prompt: "Implement issue #12 in <repo>.")
-```
+Claude Code may provide worktree isolation directly. In Codex, use native
+worktree isolation when exposed; otherwise create one worktree per issue before
+dispatch and verify each worker's `git rev-parse --show-toplevel` result. If
+isolation cannot be established, run the workers serially.
 
 ## Step 3: Collect results
 
@@ -49,8 +48,8 @@ Each worktree-worker outputs a structured result (RESULT/PR_URL/BRANCH/ISSUE). C
 
 ## Step 4: Offer next steps
 
-Via `AskUserQuestion`:
-- "Review all PRs" → invoke Skill(clawdio:review-coordination) on each successful PR
+Through the active user-decision mechanism:
+- "Review all PRs" → invoke `clawdio:review-coordination` on each successful PR
 - "Review PR #N" → review a specific one
 - "Done for now" → stop
 

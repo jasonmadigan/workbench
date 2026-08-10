@@ -7,9 +7,12 @@ description: Full lifecycle skill for shipping an issue. Implements, pushes, cre
 
 End-to-end lifecycle for shipping an issue to a merged PR.
 
+Read `../../references/dispatch-rules.md` before loading companion skills,
+dispatching agents, or asking the user for a decision.
+
 ## Arguments
 
-Passed via the Skill tool's `args` string. Parse the following:
+Parse arguments from the invoking client's skill arguments or the user's request:
 
 | Arg | Form | Example |
 |-|-|-|
@@ -84,7 +87,7 @@ Report the inferred state to the user before proceeding.
    ```bash
    gh issue edit <number> --add-assignee "@me" --add-label "in-progress"
    ```
-2. Dispatch the implement agent using `subagent_type: "clawdio:implement"`. Wait for completion.
+2. Dispatch the logical `implement` agent through the active client adapter. Wait for completion.
 
 - [ ] All tests pass
 - [ ] Implementation matches acceptance criteria
@@ -113,8 +116,8 @@ gh issue edit <number> --remove-label "in-progress"
    git diff --name-only origin/main..HEAD | grep -E '^(agents/|skills/|hooks/)'
    ```
    If matches found, invoke `clawdio:doc-sync` to verify and fix documentation.
-3. Invoke `agent-skills:shipping-and-launch` for pre-ship checklist.
-4. Invoke `agent-skills:git-workflow-and-versioning` for commit conventions.
+3. Resolve the `agent-skills:shipping-and-launch` capability for the pre-ship checklist.
+4. Resolve the `agent-skills:git-workflow-and-versioning` capability for commit conventions.
 
 - [ ] Docs are in sync (if agent/skill/hook files changed)
 - [ ] Pre-ship checklist passes

@@ -2,7 +2,7 @@
 
 ## Origin
 
-This plugin replaces clawdio, a custom Go orchestrator for managing AI agent sessions. After a structured interview (April 2025), the conclusion was: the orchestrator was over-built. The bottleneck was never orchestration infrastructure -- it was agent reliability. The investment should go into building good agents, skills, and hooks that work natively in Claude Code.
+This plugin replaces clawdio, a custom Go orchestrator for managing AI agent sessions. After a structured interview (April 2026), the conclusion was: the orchestrator was over-built. The bottleneck was never orchestration infrastructure -- it was agent reliability. The investment should go into portable agents, skills, and hooks that run through Claude Code or Codex.
 
 ## Design decisions
 
@@ -10,19 +10,21 @@ This plugin replaces clawdio, a custom Go orchestrator for managing AI agent ses
 
 Clawdio provided: work item database, GitHub polling, worktree management, tmux session lifecycle, skill-based prompt construction, workflow chaining (implement > review > merge), and a TUI for monitoring agents.
 
-Most of this is now covered by Claude Code natively:
-- Git worktrees: EnterWorktree/ExitWorktree tools
-- GitHub operations: `gh` CLI or GitHub MCP server
-- Skills: `.claude/skills/*.md`, loaded on demand
-- Subagents: `.claude/agents/*.md`, isolated context windows
-- Hooks: pre/post tool use, deterministic shell commands
-- Session resume: `--resume` flag
+The clients now provide most of those primitives:
+
+| Capability | Claude Code | Codex |
+|-|-|-|
+| Shared workflows | Plugin skills | Plugin skills |
+| Specialist execution | Plugin subagents | Built-in subagents reading canonical prompt files |
+| GitHub operations | `gh` or GitHub MCP | `gh` or GitHub MCP |
+| Guardrails | Pre/post tool hooks | Pre/post tool hooks |
+| Write isolation | Native worktree isolation | Verified git worktrees, or serial fallback |
 
 What clawdio added on top was multi-agent spawning, monitoring, and workflow chaining. But the user works serially in practice, and the fanout pattern (router agent dispatching specialists) handles workflow chaining in natural language rather than hardcoded YAML transitions.
 
 ### Router + specialist pattern
 
-A single router agent (router.md) serves as the entry point for all tasks. It classifies the request, dispatches specialists, collects results, and reports back. This replaces clawdio's workflow engine.
+A single canonical router prompt (`agents/router.md`) serves as the entry point for all tasks. It classifies the request, dispatches specialists, collects results, and reports back. Claude Code discovers it as a plugin agent; Codex reaches it through `skills/router/SKILL.md`.
 
 ```mermaid
 graph TD
@@ -57,13 +59,35 @@ graph TD
     Router -->|present| User
 ```
 
+### Portability boundary
+
+The portable core is deliberately larger than either client adapter:
+
+```mermaid
+graph LR
+    Claude[Claude agent entry] --> Router[agents/router.md]
+    Codex[Codex router skill] --> Router
+    Router --> Rules[references/dispatch-rules.md]
+    Router --> Specialists[agents/*.md]
+    Router --> Workflows[skills/*/SKILL.md]
+    ClaudeHooks[Claude hook event] --> HookBridge[hooks/file_hook.py]
+    CodexHooks[Codex apply_patch event] --> HookBridge
+```
+
+- `agents/*.md` and non-adapter skills are canonical behaviour.
+- `references/dispatch-rules.md` translates logical agent dispatch, user decisions, worktree isolation, and skill loading onto the active client.
+- `.claude-plugin/plugin.json`, `.codex-plugin/plugin.json`, and `skills/router/SKILL.md` are thin packaging or entry adapters.
+- `hooks/file_hook.py` normalises event payloads so hook policy is written once.
+
+Codex plugins do not expose Claude's Markdown agent files as custom agents. The router skill therefore gives a built-in Codex subagent the path to the relevant canonical prompt and requires it to read that file. Copying prompt bodies into `.toml` files would create two sources of truth and is prohibited.
+
 ### Multi-pass review
 
 Reviews use the fanout pattern: the router invokes the `review-coordination` skill, which classifies the PR's file paths and determines which specialist reviewers to spawn. A read-only classifier agent buckets each changed file (behaviour, types-mechanical, mixed, tests-docs) before dispatch -- the router never reads the diff -- so specialists weight attention to behaviour and mixed files and the verdict leads with a focus table. The router then dispatches the specialists in parallel and collects results grouped by specialist.
 
 Specialist findings are treated as claims, not facts. Before findings are presented or posted, the router invokes the `verify-findings` skill: one verifier agent per Critical/Important finding, in parallel, tasked with refuting it. Confirmed and plausible findings proceed; refuted findings are shown collapsed with their refutations and recorded in prior-review context so they do not resurrect on re-review rounds.
 
-The router owns the agent dispatch because subagents cannot spawn sub-subagents (they don't have access to the Agent tool). The review-coordination and verify-findings skills provide the classification, merge, and verification logic; the router executes them.
+The router owns all agent dispatch. This is a cross-client design invariant: specialists return results and never fan out further. The review-coordination and verify-findings skills provide classification, merge, and verification logic; the router executes the fanout using the active client adapter.
 
 ### SDLC loop
 
@@ -90,63 +114,44 @@ Multi-phase skills persist their progress to memory files (`memory/workflow_<ski
 
 This replaces the archived engine's `WorkflowRun` database table and `.clawdio-progress.md` file. The memory system is simpler (plain markdown files with frontmatter) and already survives context compression. State files are cleaned up on workflow completion.
 
-### Subagents vs agent teams
+### Client dispatch adapters
 
-Claude Code has two multi-agent models. This plugin uses subagents exclusively.
+All workflows use a logical pattern: router sends one task, specialist executes it, result returns. Review specialists do not need mid-flight communication because the router merges and verifies their findings after they complete.
 
-**Subagents** (what we use): fire-and-forget. Prompt in, result out. The caller blocks or collects results later. No inter-agent communication. Agent tool WITHOUT `name`.
+| Client | Dispatch rule |
+|-|-|
+| Claude Code | Use `subagent_type: "clawdio:<agent>"` without `name`; track the returned `agentId` |
+| Codex | Choose a built-in role (`worker`, `explorer`, or `default`) and require it to read the resolved canonical agent file before acting |
 
-**Agent teams** (experimental, `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS`): persistent collaborators with shared task lists and bidirectional messaging via SendMessage. Agents talk to each other, claim tasks, challenge findings. Agent tool WITH `name`.
-
-The `name` parameter on the Agent tool is what switches between the two models. Passing `name` spawns a teammate that sits idle in mailbox mode waiting for task assignments. Omitting `name` spawns a subagent that executes its prompt immediately.
-
-| | Subagents | Agent teams |
-|-|-|-|
-| Trigger | Agent tool without `name` | Agent tool with `name` |
-| Execution | Prompt executes immediately, result returns | Spawns idle, waits for SendMessage/task claims |
-| Communication | Result returns to caller only | Bidirectional via SendMessage, shared task list |
-| Best for | Focused tasks where only the result matters | Tasks requiring discussion and cross-agent coordination |
-| Maturity | Stable | Experimental -- no session resume, task status lag, one team per session |
-
-**Why subagents fit our dispatch patterns:** all our workflows are router-sends-task, specialist-does-it, result-comes-back. Review fanout dispatches code-reviewer and test-verifier in parallel, but they don't need to share findings mid-flight -- the router merges results after both complete. Worktree-workers are isolated by design. No agent needs to talk to another agent.
-
-**When agent teams would add value** (not currently implemented): competing-hypothesis debugging where agents challenge each other's theories; cross-layer coordination where frontend/backend/test agents share discoveries mid-flight; research tasks that build on each other's findings.
-
-**Decision:** don't build workflows around agent teams until the feature stabilises. Revisit when session resumption and task status reliability are resolved.
-
-### Agent dispatch rule
-
-All agent dispatch in this plugin MUST use `subagent_type` (e.g. `subagent_type: "clawdio:implement"`) WITHOUT `name`. Track agents by the `agentId` returned in the spawn response. This applies to the router, review-coordination, parallel-ship, and ship.
-
-Discovered June 2025 via controlled experiment: 8 named agents produced zero output; 1 unnamed agent completed instantly.
+The complete mapping lives in `references/dispatch-rules.md`. Client tool syntax must not leak into individual workflow skills.
 
 ### Worktree isolation
 
-Agents that do implementation work can be dispatched with `isolation: "worktree"` on the Agent tool. Claude Code creates a separate git worktree per agent, the agent works entirely within it, and the worktree is preserved if changes were made (cleaned up if not).
+Claude Code can provide worktree isolation on dispatch. Where Codex does not expose equivalent isolation, the router creates separate git worktrees, passes each absolute path to its worker, and verifies the worker's repository root before concurrent write-heavy work. If isolation cannot be guaranteed, writers run serially.
 
 This enables parallel multi-issue work: the router dispatches N worktree-worker agents simultaneously, each in its own worktree, each implementing a different issue. They can't conflict because they're in separate worktrees. When they finish, the router collects structured results (PR URLs, branch names, or blocked status) and presents a summary.
 
-The worktree-worker agent is deliberately constrained: no Agent tool access (can't spawn sub-subagents), no ability to escape its worktree, and a structured output format the router can parse. This makes it a predictable, parallelisable unit of work.
+The worktree-worker agent is deliberately constrained: it must not dispatch other agents or escape its worktree, and it has a structured output format the router can parse. This makes it a predictable, parallelisable unit of work.
 
 Each worktree-worker writes a `.clawdio-state` file in the worktree root after every phase transition. This file is never git-committed — it's orchestrator-internal. The router checks for these files before dispatching new workers, enabling recovery of workers that died mid-run. The state file records the current phase, issue reference, branch, PR URL, and timestamps.
 
 ### Three-tier primitive location
 
-1. **Per-repo** (`.claude/` in each project): CLAUDE.md, repo-specific agents and hooks
-2. **Personal plugin** (this repo, installed to `~/.claude/plugins/`): cross-cutting SDLC agents, shared skills, workflow preferences
-3. **Org-level** (future): shared plugin for team use
+1. **Per-repo**: `AGENTS.md`, `CLAUDE.md`, and repository-specific tools or policy
+2. **Clawdio plugin**: portable SDLC prompts, workflows, and guardrails
+3. **External capability plugins**: personal or organisational skills resolved by intent, with local fallbacks where possible
 
 ### Vertex auth
 
-All work uses Google Vertex AI for Claude access (work account). No direct Anthropic API access currently. This doesn't constrain the architecture -- Claude Code, GitHub Actions (claude-code-action), and the Agent SDK all support Vertex via environment variables.
+The author's Claude Code setup uses Google Vertex AI. That is a local authentication choice, not part of the plugin contract and not used by Codex.
 
-### Future: Agent SDK
+### Additional execution surfaces
 
-Start with Claude Code (interactive). When the ceiling is hit (need scheduling, GHA integration, custom UIs, Backstage plugin), port the agents to the Agent SDK. The skills and agent definitions translate directly.
+Interactive use starts in Claude Code or Codex. Scheduling, GitHub Actions, custom UIs, or a Backstage plugin can wrap the same canonical prompt resources later; such adapters should translate dispatch mechanics rather than fork workflow content.
 
 ## Success metric
 
-"I open Claude, say 'what's on?', it shows my priorities, I tell it to go."
+"I open my coding client, say 'what's on?', it shows my priorities, I tell it to go."
 
 ## User profile
 
@@ -167,8 +172,8 @@ Start with Claude Code (interactive). When the ceiling is hit (need scheduling, 
 | implement | Takes a well-defined issue, writes code, runs tests, commits | Plugin |
 | code-reviewer | General code quality review | Plugin |
 | security-auditor | Security-focused review (OWASP, injection, secrets) | Plugin |
-| go-k8s-reviewer | Go/Kubernetes specialist reviewer (generic; override in ~/.claude/agents/) | Plugin |
-| auth-reviewer | Auth/policy specialist reviewer (generic; override in ~/.claude/agents/) | Plugin |
+| go-k8s-reviewer | Go/Kubernetes specialist reviewer | Plugin |
+| auth-reviewer | Auth/policy specialist reviewer | Plugin |
 | triage | Assesses new issues, labels, prioritises, checks readiness | Plugin |
 | refine | Takes vague issues, asks clarifying questions, produces acceptance criteria | Plugin |
 | address-feedback | Takes review comments on a PR, fixes them | Plugin |
@@ -179,12 +184,13 @@ Start with Claude Code (interactive). When the ceiling is hit (need scheduling, 
 | docs | Documentation writing and updating | Plugin |
 | worktree-worker | Self-contained implement-to-PR in an isolated worktree, for parallel dispatch | Plugin |
 
-Note: subagents cannot spawn sub-subagents (no access to the Agent tool). The router owns all agent dispatch, including review fanout to specialist reviewers in parallel and worktree-worker dispatch for multi-issue shipping.
+The router owns all agent dispatch, including review fanout and worktree-worker dispatch. Specialists do not dispatch other agents, regardless of which client happens to support nesting.
 
 ## Skill catalogue
 
 | Skill | Purpose | Args |
 |-|-|-|
+| router | Codex entry adapter; loads canonical dispatch and router prompts | conversation context |
 | next | Scans GitHub for actionable work, prioritised by project board or saved team view when one exists | none |
 | ship | Full lifecycle: implement > push > draft PR > review > merge | `<issue>`, `--resume`, `--skip-review`, `--ready` |
 | pr-description | PR body template and conventions | none |
@@ -197,16 +203,16 @@ Note: subagents cannot spawn sub-subagents (no access to the Agent tool). The ro
 | worktree-recovery | Recovers in-progress worktree workers before dispatching new ones | none |
 | parallel-ship | Dispatches multiple worktree-workers in parallel for multi-issue ship | `<issues>` |
 
-Skills for commit conventions, security checklists, and review rubrics are provided by the companion plugin [agent-skills](https://github.com/addyosmani/agent-skills) (`git-workflow-and-versioning`, `security-and-hardening`, `code-review-and-quality`).
+Skills for commit conventions, security checklists, and review rubrics come from [agent-skills](https://github.com/addyosmani/agent-skills) on Claude Code or an installed equivalent elsewhere. Canonical agents retain enough baseline procedure to continue when those extensions are absent.
 
 ## Hook catalogue
 
 | Hook | Trigger | Purpose |
 |-|-|-|
-| block-env-writes | PreToolUse (Write/Edit) | Prevent writing to .env, credentials files |
-| doc-sync-reminder | PostToolUse (Write/Edit) | Remind to update docs when agent/skill/hook files change |
-| format-on-save | PostToolUse (Write/Edit) | Auto-format code after edits |
-| lint-on-edit | PostToolUse (Write/Edit) | Run linter after every file edit |
+| block-env-writes | PreToolUse (Write/Edit/apply_patch) | Prevent writing to .env and credential files |
+| doc-sync-reminder | PostToolUse (Write/Edit/apply_patch) | Remind contributors to update docs and both manifests |
+| format-on-save | PostToolUse (Write/Edit/apply_patch) | Auto-format code after edits |
+| lint-on-edit | PostToolUse (Write/Edit/apply_patch) | Run a configured linter after edits |
 
 ## MCP servers
 
@@ -219,14 +225,16 @@ Skills for commit conventions, security checklists, and review rubrics are provi
 
 | Dependency | Type | Purpose |
 |-|-|-|
-| [agent-skills](https://github.com/addyosmani/agent-skills) | Claude Code plugin | Companion skills (security, code review, TDD, debugging, git workflow) |
-| [dev-team-plugin](https://github.com/kuadrant/dev-team-plugin) | Claude Code plugin | Design docs, feature lifecycle, Go PR review, doc verification |
+| [agent-skills](https://github.com/addyosmani/agent-skills) | External capability provider | Declared Claude dependency; other clients resolve an equivalent or use the baseline |
+| [dev-team-plugin](https://github.com/kuadrant/dev-team-plugin) | External capability provider | Declared Claude dependency; local compositions cover other clients |
 | `gh` CLI | CLI tool | GitHub issue/PR operations (must be authenticated) |
+| Python 3.9+ | Runtime | Shared hook payload adapter |
 | GitHub MCP server | MCP server | Issue/PR comments, review threads |
 | Atlassian MCP server | MCP server | Jira issue search and management |
 
 ## References
 
-- [addyosmani/agent-skills](https://github.com/addyosmani/agent-skills) -- companion plugin, installed alongside clawdio
-- [kuadrant/dev-team-plugin](https://github.com/kuadrant/dev-team-plugin) -- design doc workflows, Go PR review, feature lifecycle
-- Claude Code plugin format: `.claude-plugin/plugin.json` manifest, `agents/`, `skills/`, `hooks/` directories
+- [Codex plugins](https://learn.chatgpt.com/docs/build-plugins) -- manifests, skills, hooks, and marketplace packaging
+- [Codex subagents](https://learn.chatgpt.com/docs/agent-configuration/subagents) -- built-in roles and custom-agent configuration
+- [addyosmani/agent-skills](https://github.com/addyosmani/agent-skills) -- external capability provider
+- [kuadrant/dev-team-plugin](https://github.com/kuadrant/dev-team-plugin) -- external design and feature-lifecycle provider

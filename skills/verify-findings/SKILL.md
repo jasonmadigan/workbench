@@ -1,20 +1,22 @@
 ---
 name: verify-findings
-description: Adversarial verification of specialist findings before they are presented or posted. Invoked by the router after review, address-feedback, or triage agents return claims. Filters false positives via one verifier agent per finding.
+description: Adversarially verifies specialist findings before they are presented or posted. Use when review, address-feedback, or triage agents return claims.
 ---
 
 # Verify Findings
 
 Specialist findings are claims, not facts. Before any Critical or Important finding is presented to the user or posted, dispatch one adversarial verifier per finding, tasked with refuting it. Nits pass through unverified -- not worth the tokens.
 
+Read `../../references/dispatch-rules.md` before dispatching.
+
 Two hard rules up front:
 
-- Use `subagent_type: "clawdio:verifier"` for dispatch (see `references/dispatch-rules.md`).
-- Verification fanout runs at the router main-loop level only. Never inside a subagent -- subagents cannot reliably nest Agent dispatch.
+- Dispatch the logical `verifier` agent through the active client adapter.
+- Verification fanout runs at the router main-loop level only. Do not nest it inside another specialist.
 
 ## Step 1: Fan out verifiers
 
-One verifier agent per Critical/Important finding, all in parallel: a single message with multiple Agent tool calls, each `subagent_type: "clawdio:verifier"`. Fresh context per finding -- no batching, no anchoring.
+One verifier agent per Critical/Important finding, all in parallel. Fresh context per finding -- no batching, no anchoring.
 
 Each verifier prompt includes:
 
@@ -61,4 +63,4 @@ Record refuted findings in the prior-review context that review-coordination Ste
 | Skipping verification because findings "look obviously right" | Obvious findings slip through. Always verify Critical/Important. |
 | Running the fanout inside a subagent | Router main loop only. |
 | Posting a finding with an unverified line number | Downgrade to file + snippet reference. |
-| Passing `name` to the Agent tool | NEVER. `subagent_type` only, track by `agentId`. |
+| Bypassing the active client adapter | Follow `references/dispatch-rules.md`. |

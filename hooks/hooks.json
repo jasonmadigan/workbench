@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "case \"$CLAUDE_FILE_PATH\" in *.env|*.env.*|*credentials.json|*.pem|*.key|*id_rsa*|*.secret) echo 'BLOCK: writing to sensitive file is not allowed' >&2; exit 2;; esac"
+            "command": "python3 \"${PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/hooks/file_hook.py\" block"
           }
         ]
       }
@@ -17,15 +17,15 @@
         "hooks": [
           {
             "type": "command",
-            "command": "case \"$CLAUDE_FILE_PATH\" in */agents/*.md|*/skills/*/SKILL.md|*/hooks/hooks.json) echo \"DOC SYNC: you modified a plugin definition ($(basename \"$CLAUDE_FILE_PATH\")). Update docs/architecture.md (agent/skill catalogue, diagrams) and docs/contributing.md if conventions changed. Bump version in .claude-plugin/plugin.json.\" >&2;; esac"
+            "command": "python3 \"${PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/hooks/file_hook.py\" docs"
           },
           {
             "type": "command",
-            "command": "if [ -f .prettierrc ] || [ -f .prettierrc.json ] || [ -f prettier.config.js ]; then npx prettier --write \"$CLAUDE_FILE_PATH\" >/dev/null 2>&1 || true; elif [ -f .clang-format ]; then clang-format -i \"$CLAUDE_FILE_PATH\" >/dev/null 2>&1 || true; elif command -v gofmt >/dev/null 2>&1 && echo \"$CLAUDE_FILE_PATH\" | grep -q '\\.go$'; then gofmt -w \"$CLAUDE_FILE_PATH\" >/dev/null 2>&1 || true; fi"
+            "command": "python3 \"${PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/hooks/file_hook.py\" format"
           },
           {
             "type": "command",
-            "command": "if echo \"$CLAUDE_FILE_PATH\" | grep -q '\\.go$' && command -v golangci-lint >/dev/null 2>&1; then golangci-lint run \"$CLAUDE_FILE_PATH\" >/dev/null 2>&1 || true; elif echo \"$CLAUDE_FILE_PATH\" | grep -qE '\\.(js|ts|jsx|tsx)$' && { [ -f .eslintrc* ] || [ -f eslint.config.* ]; }; then npx eslint \"$CLAUDE_FILE_PATH\" >/dev/null 2>&1 || true; fi"
+            "command": "python3 \"${PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/hooks/file_hook.py\" lint"
           }
         ]
       }

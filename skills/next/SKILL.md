@@ -30,7 +30,9 @@ For "what's on everywhere" or "across all repos", drop `--repo` from the command
 
 ## Step 2: Project boards
 
-Discover the board through the open issues' `projectItems`, not `repository.projectsV2` alone. The repo-level project list can be stale: in Kuadrant/kuadrant-console-plugin, `repository.projectsV2` returns only a closed "Backlog" project (#23), while every open issue's `projectItems` points at the live org-level board "Kuadrant" (#18). In the all-repos mode, run discovery per repo in scope.
+Discover the board through the open issues' `projectItems`, not `repository.projectsV2` alone; the repo-level project list can be stale. In all-repos mode, run discovery per repo in scope.
+
+For a Kuadrant repository or team view, read `references/kuadrant.md` for its board fields, saved-view, and Jira conventions.
 
 Project queries need the `project` (or `read:project`) token scope. If the GraphQL call fails with a scope error, say so in one line and fall back to the raw backlog rather than failing the scan.
 
@@ -102,7 +104,7 @@ query($endCursor: String) {
 }'
 ```
 
-Items-side paging is the point here: a view is cross-repo (Kuadrant view 41 mixes kuadrant-console-plugin, kuadrant-backstage-plugin and developer-portal-controller items), so walking one repo's issues can never reproduce it. A few hundred items paginate fine; this path is only taken when a view is in play.
+Items-side paging is the point here: a view can be cross-repo, so walking one repo's issues cannot reproduce it. A few hundred items paginate fine; this path is only taken when a view is in play.
 
 Rank view items by Status column order, assigned-to-me or unassigned first within each column. Surface open items only: board views usually show a Done column, never list it. When a view drove the selection, head the board section with the view and skip the per-issue scan.
 
@@ -120,7 +122,7 @@ Identify:
 - a priority single-select (Priority or similar; note the option order, e.g. MoSCoW Must > Should > Could)
 - an iteration field (Sprint) if present
 
-Kuadrant board #18, for reference: Status (Todo, In Progress, Ready For Review, In Review, Done), Priority (Must, Should, Could), Sprint (iteration), plus secondary fields (Team, Area, Estimate, Release). In practice Priority is unset on UI-team items there, so rank those by Sprint and Status; the operative team field is Area, and view 41 ("UI Touchgrass Team", `area:"UI Touch Grass" sprint:@current`) is the UI team's working lens. Other boards will differ. Tolerate the absence of any of these fields and rank with whatever exists.
+Tolerate missing fields and rank with whatever the board provides.
 
 ### Fetch item field values
 
@@ -217,21 +219,13 @@ Show open Jira tickets under their own section with key, summary, status, priori
 
 If `mcp__atlassian__jira_search` is not available, skip this step silently.
 
-### Jira project to GitHub org mapping
-
-When scoping results to the current repo, use this mapping to filter relevant Jira tickets:
-
-| Jira project | GitHub org/repos |
-|-|-|
-| CONNLINK | Kuadrant/* (`kuadrant-operator`, `mcp-gateway`, etc.) |
-
-If the current repo is in the Kuadrant org, include CONNLINK tickets. For repos not in this mapping, show all Jira tickets without org filtering.
+For a repository-specific Jira mapping, load its conditional reference. Without one, show all Jira tickets without org filtering.
 
 ## Step 6: Format output
 
 Present results in markdown tables. Group by priority (highest first):
 
-1. **Board** -- only when step 2 found an open board. Head the section with the board, e.g. `board: Kuadrant (#18)`, or with the view when one drove the selection, e.g. `board: Kuadrant (#18), view: UI Touchgrass Team (area:"UI Touch Grass" sprint:@current)`, so the lens applied is always visible. List the ranked items with status, priority, and sprint annotations, then any already-in-flight items (In Progress, assigned to me) beneath as a WIP reminder.
+1. **Board** -- only when step 2 found an open board. Head the section with the board and, when applicable, the saved view and filter so the applied lens is visible. List ranked items with status, priority, and sprint annotations, then already-in-flight items beneath as a WIP reminder.
 2. **Address feedback** -- my PRs where `reviewDecision` is `CHANGES_REQUESTED`. Invoke `clawdio:ship --resume` to fix.
 3. **Review** -- PRs requesting my review. Open with `gh pr view <number>`.
 4. **Merge** -- my PRs where `reviewDecision` is `APPROVED`. Merge with `gh pr merge <number> --squash`.

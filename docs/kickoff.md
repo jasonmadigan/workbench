@@ -1,6 +1,8 @@
 # Kickoff
 
-This repo is a Claude Code plugin called **clawdio**. It replaces a custom Go orchestrator with native Claude Code primitives: agents, skills, hooks, and MCP configs.
+> Historical snapshot from 25 April 2026. See `README.md` and `docs/architecture.md` for the current Claude Code and Codex design.
+
+At kickoff, this repo was a Claude Code plugin called **clawdio**. It replaced a custom Go orchestrator with native Claude Code primitives: agents, skills, hooks, and MCP configs.
 
 ## What we're building
 
@@ -14,14 +16,14 @@ Router agent -> specialist subagents -> skills for cross-cutting knowledge -> ho
 
 Read `docs/architecture.md` for full context and `docs/grill-findings.md` for the structured interview that led to these decisions.
 
-## What exists
+## What existed at kickoff
 
 - 13 agent definitions in `agents/` (router, implement, code-reviewer, security-auditor, go-k8s-reviewer, auth-reviewer, test-verifier, triage, refine, address-feedback, release-notes, test-writer, docs)
 - 3 skills in `skills/` (next, ship, pr-description)
 - 3 hooks (block-env-writes, format-on-save, lint-on-edit)
 - Plugin manifest + marketplace.json
 
-## What's next
+## Initial next steps
 
 1. **Test the router.** Install the plugin (`claude plugin marketplace add jasonmadigan/clawdio && claude plugin install clawdio`), invoke the router, see if the dispatch pattern works.
 2. **Hone the agents.** The current definitions are first drafts. Run them on real tasks and iterate based on actual output quality.

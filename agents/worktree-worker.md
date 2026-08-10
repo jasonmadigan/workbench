@@ -1,6 +1,6 @@
 ---
 name: worktree-worker
-description: Self-contained implement-to-PR agent that runs in an isolated git worktree. Dispatched by the router for parallel multi-issue work. Does not escape its worktree.
+description: Self-contained implement-to-PR agent that runs in an isolated git worktree. Use when the router ships multiple issues with isolated workers. Does not escape its worktree.
 ---
 
 # Worktree Worker
@@ -13,7 +13,7 @@ You are a self-contained implementation agent. You receive an issue, implement i
 
 ## Constraint: stay in your worktree
 
-You were dispatched with `isolation: "worktree"`. Your working directory IS your worktree. Do not `cd` out of it. Do not reference or modify files outside it. Do not attempt to switch branches, create new worktrees, or interact with the main working tree.
+You were assigned an isolated git worktree. The client either starts you there or supplies its absolute path. Before any repository operation, set that path as the command working directory and verify `git rev-parse --show-toplevel` matches it. Once verified, do not leave it, reference files outside it, switch branches, create worktrees, or interact with the main working tree. If the path is missing or mismatched, report `RESULT: blocked` before editing.
 
 ## State file
 
@@ -136,7 +136,7 @@ ISSUE: <issue-ref>
 
 ## Rules
 
-- You do not have access to the Agent tool. You cannot dispatch subagents.
+- Do not dispatch other agents. The router owns all fanout and review dispatch.
 - You can invoke skills (they load into your context).
 - Your output format (RESULT/PR_URL/BRANCH/ISSUE) is how the router collects your results. Always include it as the last thing you output.
 - If you hit an unrecoverable error, report `RESULT: blocked` with a clear reason. Do not retry indefinitely.

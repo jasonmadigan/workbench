@@ -1,24 +1,27 @@
 ---
 name: merge-gate
-description: Pre-merge safety checks. Invoked by the router before any merge.
+description: Pre-merge safety checks. Use when the router is preparing to merge a pull request.
 ---
 
 # Merge Gate
 
 Pre-merge safety checks. Invoked by the router before any merge.
 
+Read `../../references/dispatch-rules.md` before loading another skill or
+asking the user for a decision.
+
 ## Check tree
 
 ```
 Merge request
 ├── Has the PR been reviewed?
-│   ├── No → invoke Skill(clawdio:review-coordination) first
+│   ├── No → invoke clawdio:review-coordination first
 │   └── Yes → continue
 ├── Are CI checks passing?
 │   ├── No → report failures
 │   └── Yes → continue
 ├── Is the branch behind base?
-│   ├── Yes → offer to rebase first via AskUserQuestion
+│   ├── Yes → offer to rebase first through the active user-decision mechanism
 │   │         Options: "Rebase and merge", "Merge anyway", "Cancel"
 │   │         If rebase: gh pr update-branch or suggest `git rebase origin/main && git push --force-with-lease`
 │   └── No → continue
@@ -49,4 +52,3 @@ git worktree remove <worktree-path> --force 2>/dev/null
 git worktree prune
 git pull
 ```
-

@@ -1,11 +1,14 @@
 ---
 name: worktree-recovery
-description: Recovers in-progress worktree workers. Invoked by the router before dispatching new worktree-workers.
+description: Recovers in-progress worktree workers. Use when the router is about to dispatch new worktree-workers.
 ---
 
 # Worktree Recovery
 
 Recovers in-progress worktree workers. Invoked by the router before dispatching new worktree-workers.
+
+Read `../../references/dispatch-rules.md` before dispatching or asking the user
+for a decision.
 
 ## Detection
 
@@ -23,7 +26,7 @@ cat <worktree-path>/.clawdio-state 2>/dev/null
 
 ## User prompt
 
-If state files exist, present them to the user via `AskUserQuestion`:
+If state files exist, present them through the active client's user-decision mechanism:
 
 ```
 Found in-progress worktree work:

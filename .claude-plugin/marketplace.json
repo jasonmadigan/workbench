@@ -1,6 +1,6 @@
 {
   "name": "jasonmadigan-clawdio",
-  "description": "Personal Claude Code plugin for SDLC automation",
+  "description": "Portable Claude Code and Codex plugin for SDLC automation",
   "owner": {
     "name": "Jason Madigan"
   },
@@ -11,11 +11,9 @@
   "plugins": [
     {
       "name": "clawdio",
-      "source": {
-        "source": "github",
-        "repo": "jasonmadigan/clawdio"
-      },
-      "description": "Personal SDLC toolkit. Router agent, specialist subagents, workflow skills."
+      "source": ".",
+      "description": "Portable SDLC toolkit with shared router, specialist prompts, workflow skills, and hooks.",
+      "category": "Developer Tools"
     }
   ]
 }

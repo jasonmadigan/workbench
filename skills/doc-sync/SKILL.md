@@ -17,15 +17,15 @@ Find all documentation files in the repo:
 find . -maxdepth 3 -name '*.md' -not -path './.claude/*' -not -path './node_modules/*' -not -path './vendor/*' | sort
 ```
 
-Key files to always check if they exist: `README.md`, `CLAUDE.md`, `CONTRIBUTING.md`, any files in `docs/` or `doc/`. In this repo, check `docs/architecture.md`, `docs/contributing.md`, and `docs/references.md`.
+Key files to always check if they exist: `README.md`, `AGENTS.md`, `CLAUDE.md`, `CONTRIBUTING.md`, and any files in `docs/` or `doc/`. In this repo, check `docs/architecture.md`, `docs/contributing.md`, and `docs/references.md`.
 
 ### Step 2: Discover what's documentable
 
 Scan the repo for things documentation typically references:
 
 - **Directory structure**: `ls -d */` at the root
-- **Entry points**: main files, manifests (`package.json`, `.claude-plugin/plugin.json`, `go.mod`, `Cargo.toml`, `Makefile`)
-- **Agents/skills/hooks**: `agents/*.md`, `skills/*/SKILL.md`, `hooks/`, `.claude/` config files (if a Claude Code plugin)
+- **Entry points**: main files, manifests (`package.json`, `.claude-plugin/plugin.json`, `.codex-plugin/plugin.json`, `go.mod`, `Cargo.toml`, `Makefile`)
+- **Agents/skills/hooks**: `agents/*.md`, `skills/*/SKILL.md`, `hooks/`, `.claude/`, `.codex/`, and client plugin manifests
 - **Commands/targets**: `make -qp 2>/dev/null | grep '^[a-zA-Z].*:' | head -30` for Makefile targets
 - **Dependencies**: package files, import statements, dependency declarations
 - **Config files**: `.env.example`, config templates, env var references
@@ -70,13 +70,15 @@ If issues found: fix them. Edit the documentation files to match the source of t
 
 ## Plugin-specific checks
 
-When running in a Claude Code plugin repo (detected by `.claude-plugin/` directory):
+When running in an agent plugin repo (detected by `.claude-plugin/` or `.codex-plugin/`):
 
 - Agent catalogue: run `ls agents/*.md` and compare against any agent tables in docs
 - Skill catalogue: run `ls -d skills/*/` and compare against any skill tables in docs
 - Hook catalogue: read `hooks/hooks.json` and compare entries against any hook tables in docs
 - Router dispatch: read `agents/router.md` and verify all dispatch targets appear in dispatch diagrams
-- Plugin manifest: read `.claude-plugin/plugin.json` and verify `version` matches what docs claim
+- Plugin manifests: read every client manifest and verify documented versions. If both `.claude-plugin/plugin.json` and `.codex-plugin/plugin.json` exist, their `name` and `version` must match.
+- Portability adapter: when canonical prompts in `agents/` change, verify `references/dispatch-rules.md` and `skills/router/SKILL.md` still translate them without copying their bodies.
+- External capabilities: document third-party skills by intent and fallback. Never duplicate their implementation or assume one client's namespace is universally installed.
 
 ## Anti-patterns
 

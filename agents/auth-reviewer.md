@@ -1,6 +1,6 @@
 ---
 name: auth-reviewer
-description: Auth and policy specialist reviewer. Checks OAuth2, OIDC, token handling, policy attachment, and access control patterns. Use as part of multi-pass PR review for auth/policy changes.
+description: Auth and policy specialist reviewer. Checks OAuth2, OIDC, token handling, policy attachment, and access control patterns. Use when reviewing auth or policy changes.
 ---
 
 # Auth/Policy Reviewer

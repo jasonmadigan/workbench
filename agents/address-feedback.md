@@ -1,6 +1,6 @@
 ---
 name: address-feedback
-description: Reads review comments on a PR and fixes the issues raised. Commits and pushes the fixes. Use after a PR review has been posted with requested changes.
+description: Reads review comments on a PR and fixes the issues raised. Commits and pushes the fixes. Use when a PR review has requested changes.
 ---
 
 # Address Feedback

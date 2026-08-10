@@ -1,29 +1,44 @@
 # clawdio
 
-Claude Code plugin for SDLC automation. A router agent dispatches to specialist subagents based on the task. Skills provide cross-cutting workflow knowledge. Hooks enforce guardrails.
+Portable Claude Code and Codex plugin for SDLC automation. A router dispatches specialist prompts based on the task, skills provide cross-cutting workflow knowledge, and hooks enforce guardrails.
 
-The premise: the bottleneck is never orchestration infrastructure -- it's agent reliability. This plugin invests in good agents, skills, and hooks that work natively in Claude Code, replacing a [custom Go orchestrator](https://github.com/jasonmadigan/clawdio) that was over-built for what it did.
+The premise: the bottleneck is never orchestration infrastructure -- it's agent reliability. Clawdio keeps one canonical set of agents and workflows, with thin adapters for each client, rather than maintaining parallel Claude and Codex implementations.
 
 ## Install
 
-```bash
-# add the marketplace
-claude plugin marketplace add jasonmadigan/clawdio
+### Codex
 
-# install the plugin (user scope, available in all repos)
+```bash
+codex plugin marketplace add jasonmadigan/clawdio
+codex plugin add clawdio@jasonmadigan-clawdio
+```
+
+Start a new conversation and ask Codex to use `clawdio:router`, or describe the SDLC task and name clawdio. Codex loads the router skill, which reads the same canonical router and specialist prompts used by Claude Code.
+
+### Claude Code
+
+```bash
+claude plugin marketplace add addyosmani/agent-skills
+claude plugin marketplace add kuadrant/dev-team-plugin
+claude plugin marketplace add jasonmadigan/clawdio
 claude plugin install clawdio
 ```
 
-For local development:
+Start with the router agent, or select it with `--agent clawdio:router`.
+
+### Local development
 
 ```bash
+# Claude Code
 claude --plugin-dir /path/to/clawdio
+claude --plugin-dir /path/to/clawdio --agent clawdio:router
 
-# or with a specific agent and permissions
-claude --plugin-dir ~/Work/clawdio --dangerously-skip-permissions --agent clawdio:router
+# Codex: add the checkout as a local marketplace, then install from it
+codex plugin marketplace add /path/to/clawdio
+codex plugin add clawdio@jasonmadigan-clawdio
 ```
 
-Reload after changes without restarting Claude:
+Claude Code can reload changes in an active session:
 
 ```
 /reload-plugins
@@ -31,25 +46,26 @@ Reload after changes without restarting Claude:
 
 ## Dependencies
 
-Install these separately -- clawdio agents and skills reference them.
+Only `gh` is required for GitHub workflows themselves. Clawdio also requests capabilities supplied by other skill packages.
 
-### Plugins
+### External capability providers
 
-| Plugin | Install | What it provides |
+| Capability | Claude Code installation | Portable behaviour when absent |
 |-|-|-|
-| [agent-skills](https://github.com/addyosmani/agent-skills) | `claude plugin marketplace add addyosmani/agent-skills && claude plugin install agent-skills` | Security hardening, code review, TDD, debugging, git workflow, spec-driven development |
-| [dev-team-plugin](https://github.com/kuadrant/dev-team-plugin) | `claude plugin marketplace add kuadrant/dev-team-plugin && claude plugin install kdt` | Design docs, feature lifecycle, Go PR review, doc verification, external contribs |
-| [playwright](https://github.com/anthropics/claude-plugins-official) | `claude plugin install playwright` | Browser automation for UI test verification |
+| [agent-skills](https://github.com/addyosmani/agent-skills) | `claude plugin marketplace add addyosmani/agent-skills && claude plugin install agent-skills` | Use an installed equivalent skill, then fall back to the baseline procedure in the canonical specialist prompt |
+| [dev-team-plugin](https://github.com/kuadrant/dev-team-plugin) (`kdt`) | `claude plugin marketplace add kuadrant/dev-team-plugin && claude plugin install kdt` | Compose clawdio's local refine, docs, implement, review, and next workflows |
+| Browser automation | `claude plugin install playwright` | Use an available browser-testing skill or MCP server; otherwise report that UI verification was unavailable |
 
-Clawdio handles SDLC orchestration (router, specialists, shipping). agent-skills handles cross-cutting development practices. kdt provides design doc workflows and feature lifecycle management. The router dispatches to all three.
+The Claude manifest declares `agent-skills` and `kdt` as package dependencies. Codex has no portable way to assume those Claude packages are present, so the central resolver in [`references/dispatch-rules.md`](references/dispatch-rules.md) treats each external name as a capability request: prefer the named skill, then an installed equivalent, then a documented local fallback. Clawdio does not copy third-party skill bodies into this repository.
 
 ### CLI tools
 
 | Tool | Purpose | Used by |
 |-|-|-|
 | [`gh`](https://cli.github.com/) | GitHub issue/PR operations | implement, review, triage, refine, address-feedback, next, ship, worktree-worker, issues |
+| Python 3.9+ | Portable hook payload parsing | lifecycle hooks |
 
-Must be authenticated (`gh auth login`).
+GitHub CLI must be authenticated (`gh auth login`).
 
 ### MCP servers
 
@@ -58,27 +74,45 @@ Must be authenticated (`gh auth login`).
 | GitHub MCP | Issue/PR comments, review threads | address-feedback |
 | [Atlassian MCP](https://github.com/sooperset/mcp-atlassian) | Jira issue search, creation, updates | next, triage, router |
 
-Install Atlassian MCP via `claude mcp add atlassian -s user -e JIRA_URL=https://your-site.atlassian.net -e JIRA_USERNAME=you@company.com -e JIRA_API_TOKEN=your-token -- uvx mcp-atlassian --jira-url https://your-site.atlassian.net`. Requires `uv` installed.
+Install Atlassian MCP with either client (requires `uv`):
+
+```bash
+# Claude Code
+claude mcp add atlassian -s user \
+  -e JIRA_URL=https://your-site.atlassian.net \
+  -e JIRA_USERNAME=you@company.com \
+  -e JIRA_API_TOKEN=your-token \
+  -- uvx mcp-atlassian --jira-url https://your-site.atlassian.net
+
+# Codex
+codex mcp add atlassian \
+  --env JIRA_URL=https://your-site.atlassian.net \
+  --env JIRA_USERNAME=you@company.com \
+  --env JIRA_API_TOKEN=your-token \
+  -- uvx mcp-atlassian --jira-url https://your-site.atlassian.net
+```
 
 ## How it works
 
-Talk to the **router** agent. It classifies your request and dispatches the right specialist.
+Talk to the **router**. Claude Code exposes it as a native plugin agent; Codex exposes a thin router skill that loads the canonical `agents/router.md`. Both use the same specialist files and workflows.
 
 ```mermaid
 graph LR
-    You -->|request| Router
+    You -->|request| Adapter{client adapter}
+    Adapter -->|Claude agent| Router
+    Adapter -->|Codex skill| Router
     Router -->|classify & dispatch| Agents[agents: implement, triage, refine, address-feedback, release-notes, test-writer, docs, worktree-worker]
     Router -->|invoke| Skills[skills: next, ship, pluck, issues, pr-description, doc-sync, review-coordination, verify-findings, merge-gate, worktree-recovery, parallel-ship]
     Router -->|review fanout| Review[code-reviewer + test-verifier + domain specialists]
     Agents -->|result| Router
     Review -->|findings| Router
     Router -->|present & confirm| You
-    Hooks -.->|guardrails| Agents
+    Hooks -.->|portable guardrails| Agents
 ```
 
 ### Review flow
 
-The router owns the review fanout. Subagents can't spawn sub-subagents, so the router dispatches all specialists in parallel.
+The router owns review fanout on both clients. Specialists never dispatch other specialists, which keeps the execution model predictable and the canonical prompts portable.
 
 ```mermaid
 graph TD
@@ -140,7 +174,7 @@ graph TD
     L -->|team| Q[report draft PR link]
 ```
 
-For multiple issues ("ship #1, #2, #3"), the router dispatches worktree-worker agents in parallel, each in an isolated git worktree.
+For multiple issues ("ship #1, #2, #3"), the router dispatches worktree-worker agents in isolated git worktrees when the active client provides or can verify that isolation; otherwise it runs write-heavy work serially.
 
 ### What's on flow
 
@@ -186,6 +220,8 @@ graph TD
 
 ## Agents
 
+These Markdown files are the canonical specialist prompts. Claude Code discovers them as plugin agents; the Codex router passes their paths to built-in subagents instead of maintaining duplicate TOML definitions.
+
 | Agent | Purpose |
 |-|-|
 | router | Task intake, classification, delegation. Coordinates review fanout. Never writes code. |
@@ -206,12 +242,13 @@ graph TD
 
 ## Skills
 
-Clawdio provides its own skills for SDLC orchestration. For cross-cutting development practices (TDD, debugging, security hardening, code review), it leans on the companion [agent-skills](https://github.com/addyosmani/agent-skills) plugin. Design doc workflows and feature lifecycle come from [dev-team-plugin](https://github.com/kuadrant/dev-team-plugin) (kdt).
+Clawdio provides its own skills for SDLC orchestration. Optional providers such as [agent-skills](https://github.com/addyosmani/agent-skills) and [dev-team-plugin](https://github.com/kuadrant/dev-team-plugin) can add deeper development or feature-lifecycle guidance.
 
 ### Clawdio skills
 
 | Skill | Trigger | Args | Purpose |
 |-|-|-|-|
+| router | "use clawdio", "clawdio router" | conversation context | Codex entry adapter that loads the canonical router and dispatch rules; Claude Code normally enters through the native router agent |
 | next | "what's on?", "what next?", "next project issues?" | none | Scans GitHub and Jira for issues, PRs, and feedback across repos, ranked by project boards or saved team views where present |
 | ship | "ship #42" | `<issue>`, `--resume`, `--skip-review`, `--ready` | Full lifecycle: implement > push > draft PR > self-review > fix |
 | pluck | "pluck", "claim issue", "grab issue" | none | Claim unassigned issues from the repo backlog without implementing |
@@ -224,9 +261,9 @@ Clawdio provides its own skills for SDLC orchestration. For cross-cutting develo
 | worktree-recovery | worktree recovery | none | Recovers in-progress worktree workers before dispatching new ones |
 | parallel-ship | "ship #1, #2, #3" | `<issues>` | Dispatches multiple worktree-workers in parallel for multi-issue ship |
 
-### agent-skills (companion plugin)
+### agent-skills (external provider)
 
-Clawdio agents invoke [agent-skills](https://github.com/addyosmani/agent-skills) skills at key workflow points. These provide the development discipline that clawdio orchestrates.
+Clawdio agents request [agent-skills](https://github.com/addyosmani/agent-skills) capabilities at key workflow points. When those exact skills are not installed, the portability resolver uses an equivalent installed skill or the baseline process already present in the agent prompt.
 
 | agent-skills skill | Used by | When |
 |-|-|-|
@@ -245,9 +282,9 @@ Clawdio agents invoke [agent-skills](https://github.com/addyosmani/agent-skills)
 | documentation-and-adrs | docs | ADR structure and documentation patterns |
 | browser-testing-with-devtools | test-verifier | Drive browser for UI verification |
 
-### kdt (companion plugin)
+### kdt (external provider)
 
-The router dispatches [dev-team-plugin](https://github.com/kuadrant/dev-team-plugin) skills for design and feature lifecycle work.
+The router prefers [dev-team-plugin](https://github.com/kuadrant/dev-team-plugin) skills for design and feature lifecycle work. Local compositions cover the same routing intent when kdt is unavailable; clawdio does not vendor kdt's instructions.
 
 | kdt skill | Trigger | Purpose |
 |-|-|-|
@@ -260,36 +297,41 @@ The router dispatches [dev-team-plugin](https://github.com/kuadrant/dev-team-plu
 
 | Hook | Trigger | Purpose |
 |-|-|-|
-| block-env-writes | Before Write/Edit | Blocks writes to `.env`, credentials, `.pem`, `.key` files |
-| doc-sync-reminder | After Write/Edit | Reminds to update docs when agent/skill/hook files change |
-| format-on-save | After Write/Edit | Runs project formatter if configured (prettier, gofmt, clang-format) |
-| lint-on-edit | After Write/Edit | Runs project linter if configured (eslint, golangci-lint) |
+| block-env-writes | Before Write/Edit or apply_patch | Blocks writes to `.env`, credentials, `.pem`, `.key` files |
+| doc-sync-reminder | After Write/Edit or apply_patch | Reminds to update docs and both manifests when plugin definitions change |
+| format-on-save | After Write/Edit or apply_patch | Runs project formatter if configured (prettier, gofmt, clang-format) |
+| lint-on-edit | After Write/Edit or apply_patch | Runs project linter if configured (eslint, golangci-lint) |
+
+`hooks/file_hook.py` normalises Claude Code's file-path input and Codex's `apply_patch` payload. Hook policy and formatter/linter logic therefore live in one implementation.
 
 ## Structure
 
 ```
 agents/           subagent definitions (one .md per agent)
 skills/           on-demand skills (SKILL.md per directory)
-hooks/            lifecycle hooks (hooks.json)
+hooks/            shared lifecycle config and portable hook implementation
 references/       supporting docs agents can read (includes dispatch-rules.md)
 docs/             architecture decisions and project context
-.claude-plugin/   plugin manifest and marketplace config
+.claude-plugin/   Claude Code manifest and shared marketplace config
+.codex-plugin/    Codex manifest
+AGENTS.md         Codex repository instructions
+CLAUDE.md         Claude Code repository instructions
 ```
 
 ## Personalisation
 
-The go-k8s-reviewer and auth-reviewer ship with generic definitions suitable for any Go/K8s or auth project. For domain-specific review depth, override them with personal versions in `~/.claude/agents/` -- personal agents take precedence over plugin agents.
+The go-k8s-reviewer and auth-reviewer ship with generic definitions suitable for any Go/K8s or auth project. Claude Code users can override them in `~/.claude/agents/`; Codex users can add repository-specific context in `AGENTS.md` or install an equivalent specialist skill.
 
-Personal agent overrides stay out of this repo. They're your competitive advantage, not a shared concern.
+Personal and proprietary prompt extensions stay out of this repo.
 
 ## Development
 
 See [docs/contributing.md](docs/contributing.md) for how to write agents, skills, and hooks.
 
-Edit, test locally with `claude --plugin-dir .`, push, then `claude plugin update clawdio@jasonmadigan-clawdio`.
+Keep both manifests at the same version. Validate with both clients before publishing; the exact commands are in the contributor guide.
 
 ## Design
 
-See [docs/architecture.md](docs/architecture.md) for the full design rationale, including why this is a plugin and not an orchestrator, the three-tier primitive location model, and future Agent SDK migration path.
+See [docs/architecture.md](docs/architecture.md) for the full design rationale, including why this is a plugin rather than an orchestrator and how the shared prompt/adaptor boundary works.
 
 See [docs/grill-findings.md](docs/grill-findings.md) for the structured interview that informed these decisions.
