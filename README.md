@@ -15,6 +15,14 @@ codex plugin add clawdio@jasonmadigan-clawdio
 
 Start a new conversation and ask Codex to use `clawdio:router`, or describe the SDLC task and name clawdio. Codex loads the router skill, which reads the same canonical router and specialist prompts used by Claude Code.
 
+To update an existing Codex installation, refresh the Git marketplace snapshot:
+
+```bash
+codex plugin marketplace upgrade jasonmadigan-clawdio
+```
+
+The installed `clawdio@jasonmadigan-clawdio` plugin follows that snapshot, so it does not need to be removed or added again. Start a new Codex conversation after upgrading. To refresh every configured Git marketplace instead, omit the marketplace name.
+
 ### Claude Code
 
 ```bash
