@@ -132,7 +132,7 @@ Resolve the `agent-skills:test-driven-development` capability for TDD.
 - Rules should be things the agent would otherwise get wrong.
 - The description field informs Claude dispatch and documents Codex routing intent. Make it precise.
 - British English. No emojis. No AI-sounding prose.
-- Any agent that posts externally-visible comments (PR reviews, issue updates) must follow the comment style in CLAUDE.md. Terse, no preamble, no sign-offs, severity labels with file:line refs.
+- Any agent that posts externally-visible comments (PR reviews, issue updates) must follow the comment style in CLAUDE.md. Keep review severity and file:line evidence internally; make posted comments terse, friendly, concrete, and actionable.
 
 ### Worktree-isolated agents
 

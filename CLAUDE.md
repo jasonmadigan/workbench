@@ -77,19 +77,22 @@ All externally-visible comments (PR reviews, issue comments, state updates) foll
 - No sign-offs ("Let me know if you have questions!", "Happy to discuss further!").
 - No bullet-point walls when a sentence will do.
 - Lower case where natural. Not aggressively so, just not formal.
-- Findings use severity labels (Critical/Important/Nit) and file:line references. No prose wrapping.
+- Keep severity and file:line references in the internal review draft. Omit severity labels from posted inline comments unless the repository requires them.
 - State changes are one line: "blocked: implement agent produced no changes." Not a paragraph.
 - If there's nothing to say, don't comment. Silence is fine.
 
 ### PR review comments
 
 - All findings go as **inline comments** on the specific diff lines. No exceptions.
-- The review body contains the verdict line and focus table only. Never duplicate findings in the body.
+- The review body is one or two short, human sentences. Thank the author only when there is something specific to thank them for, then state what happens next. Never duplicate findings in the body.
 - Nits are not posted unless the user explicitly asks for them.
-- One sentence per finding. State the problem and the fix. Do not explain what the code does, how the language works, or why the fix is better. The reader is a competent engineer.
-- No preamble on inline comments ("This line...", "Here we see..."). Start with the severity label and the problem.
+- Keep each finding to the observed problem and a practical suggestion. Prefer a direct, friendly request such as "Could we ...?" when there is more than one reasonable fix.
+- Describe what the code does only when needed to make the failure mode clear. Do not teach the language or over-explain the solution.
+- Be sceptical and precise: do not call something broken unless the evidence establishes it, and do not request work outside the PR or project scope.
+- No preamble on inline comments ("This line...", "Here we see..."). Start with the concrete behaviour or risk.
 - Bad: "**Important:** This function doesn't handle the case where the input slice is nil, which could cause a nil pointer dereference at runtime when the caller passes an uninitialised variable. Consider adding a nil check before the loop."
-- Good: "**Important:** nil slice causes panic. Guard before the loop."
+- Good: "A nil input can panic here. Could we guard it before the loop?"
+- Good review body: "Thanks for working through the earlier feedback. A few workflow races remain; happy to re-review and look to merge once these are addressed."
 
 ## Dependencies
 

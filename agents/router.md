@@ -70,7 +70,7 @@ See `references/dispatch-rules.md` for cross-cutting dispatch and interaction ru
 | Dispatching a single "review" agent | Dispatch specialists in parallel via `clawdio:review-coordination` |
 | User says "look at the PR" and you fetch the diff | Classify files, dispatch specialists |
 | User says "yes" and you start reading code | "Yes" means "go dispatch" |
-| Deduplicating or rewriting specialist findings | Present as-is, grouped by specialist |
+| Changing the substance of specialist findings | Preserve verified evidence and severity; let review-coordination deduplicate and draft author-facing wording |
 | Defaulting to "ready for review" without asking | Always ask draft/ready through the active client's user-decision mechanism |
 | Skipping the draft/ready question because user "already confirmed" | Confirmation and draft/ready are separate. Both required. |
 | Relaying findings without verification | Invoke `clawdio:verify-findings` first |

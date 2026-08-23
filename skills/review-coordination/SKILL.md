@@ -67,7 +67,7 @@ The classifier's prompt:
 
 Wait for the classifier to return before dispatching specialists -- this step is sequential, then Step 2 runs in parallel. The classification feeds two places:
 - Each specialist dispatch prompt (Step 2)
-- The focus table at the top of the final review report (Step 3)
+- The internal review summary used to weight and verify findings (Step 3)
 
 ## Step 1.9: Gather prior review context (round 2+ only)
 
@@ -84,7 +84,7 @@ gh api repos/{owner}/{repo}/pulls/{number}/comments --jq '[.[] | {path, line: .o
 Assemble a prior-review summary containing:
 - **Prior verdicts**: which reviewers posted, what verdict (APPROVED, CHANGES_REQUESTED, COMMENTED), and the verdict body
 - **Prior findings**: the inline comments grouped by file, with severity labels if present
-- **Refuted findings**: findings filtered out by verification (Step 3.5) in earlier rounds, each with its one-line refutation. Sourced from the prior round's session context or the collapsed "Filtered out by verification" section in the posted review body.
+- **Refuted findings**: findings filtered out by verification (Step 3.5) in earlier rounds, each with its one-line refutation. Source these from the prior round's session context; they are not author-facing feedback.
 
 This summary is passed to agents in Step 2.
 
@@ -118,17 +118,12 @@ When all specialists return, synthesise their findings into a single assessment.
 3. **Security** -- promote any Critical findings from security-auditor (if dispatched) to blockers.
 4. **Performance** -- pull from code-reviewer's performance findings or domain specialists.
 
-Then produce a verdict. The focus table from Step 1.7 goes at the TOP so the human narrows what to look at.
+Then produce an internal verdict and a short author-facing review body.
 
-**All findings go as inline comments on the diff. The review body is the verdict and focus table only.** Do not duplicate findings in the body. Nits are excluded unless the user explicitly asked for them.
+**All findings go as inline comments on the diff.** Do not duplicate findings in the body. Nits are excluded unless the user explicitly asked for them.
 
 ```
-## Review verdict: APPROVE | CHANGES REQUESTED | BLOCKED
-
-| Review focus | Files |
-|-|-|
-| focus: behaviour + mixed | [files, with behaviour hunks noted for mixed] |
-| skim: types-mechanical, tests-docs | [files] |
+Thanks for [specific contribution or earlier revisions, when warranted]. A few [plain-language summary] remain; happy to re-review and look to merge once these are addressed.
 ```
 
 If any specialist returned a Critical finding, the default verdict is CHANGES REQUESTED.
@@ -138,12 +133,12 @@ If any specialist returned a Critical finding, the default verdict is CHANGES RE
 Before presenting or posting anything, invoke `clawdio:verify-findings` on the merged Critical and Important findings. Nits pass through unverified. The skill fans out one verifier agent per finding (router main loop, in parallel) and returns a verdict for each.
 
 - **Confirmed** and **plausible** findings proceed to Step 4 unchanged.
-- **Refuted** findings move out of the verdict sections into a collapsed "Filtered out by verification" section at the end of the review body, one-line refutation each. Never silently dropped.
+- **Refuted** findings stay in the internal draft with a one-line refutation so the user can audit what was filtered. Do not post them to the author.
 - Findings whose file:line could not be validated against the diff are downgraded to file + code snippet references before posting.
 
 ## Step 4: Post to GitHub
 
-Present the draft to the user. Follow the applicable project instructions (`AGENTS.md`, `CLAUDE.md`, or both): inline comments only, one sentence per finding, no body duplication.
+Present the draft to the user. Follow the applicable project instructions (`AGENTS.md`, `CLAUDE.md`, or both): focused inline comments, a terse human review body, and no duplication.
 
 Use the user-decision mechanism from the portability rules to present the full draft with options: "Post as-is", "Edit first", "Don't post". Do not post without explicit approval.
 
@@ -164,12 +159,12 @@ gh api repos/{owner}/{repo}/pulls/{number}/reviews --method POST --input - <<'EO
 {
   "commit_id": "<commit_sha>",
   "event": "REQUEST_CHANGES",
-  "body": "## Review verdict: CHANGES REQUESTED\n\n| Review focus | Files |\n|-|-|\n| focus: behaviour + mixed | ... |\n| skim: types-mechanical, tests-docs | ... |",
+  "body": "Thanks for working through the earlier feedback. A few error-path issues remain; happy to re-review and look to merge once these are addressed.",
   "comments": [
     {
       "path": "internal/broker/broker.go",
       "line": 42,
-      "body": "**Critical:** unchecked nil dereference on error path. Guard `err != nil` before access."
+      "body": "This can dereference a nil value on the error path. Could we guard `err != nil` before accessing it?"
     }
   ]
 }
@@ -178,8 +173,8 @@ EOF
 
 Rules:
 - `event`: `"REQUEST_CHANGES"` when verdict is CHANGES REQUESTED or BLOCKED. `"COMMENT"` when APPROVE.
-- `body`: verdict line + focus table ONLY. No findings in the body. Exception: findings that reference lines outside the diff go in the body because GitHub rejects inline comments on lines not in the diff. Append the collapsed "Filtered out by verification" section from Step 3.5 if any findings were refuted.
-- `comments`: array of inline findings. Each needs `path`, `line` (line number in the NEW file from the diff hunk headers), and `body`. One sentence: severity label, problem, fix. No nits unless user asked.
+- `body`: one or two short sentences. Thank the author only for something specific, summarise what remains without listing findings, and state the next step. Keep findings outside the diff in the user-facing draft for separate handling; do not make the review body dense to work around GitHub's inline-comment restriction.
+- `comments`: array of inline findings. Each needs `path`, `line` (line number in the NEW file from the diff hunk headers), and `body`. State the observed behaviour or risk, then offer a practical suggestion. Prefer "Could we ...?" where the implementation choice belongs to the author. Omit severity labels unless repository instructions require them. No nits unless user asked.
 - `commit_id`: the head SHA fetched above. Required.
 
 ## Step 5: Suggest next action
