@@ -15,13 +15,13 @@ codex plugin add clawdio@jasonmadigan-clawdio
 
 Start a new conversation and ask Codex to use `clawdio:router`, or describe the SDLC task and name clawdio. Codex loads the router skill, which reads the same canonical router and specialist prompts used by Claude Code.
 
-To update an existing Codex installation, refresh the Git marketplace snapshot:
+To update a marketplace added with the GitHub repository name above, refresh its cached Git snapshot:
 
 ```bash
 codex plugin marketplace upgrade jasonmadigan-clawdio
 ```
 
-The installed `clawdio@jasonmadigan-clawdio` plugin follows that snapshot, so it does not need to be removed or added again. Start a new Codex conversation after upgrading. To refresh every configured Git marketplace instead, omit the marketplace name.
+The installed `clawdio@jasonmadigan-clawdio` plugin follows that snapshot, so it does not need to be removed or added again. Start a new Codex conversation after upgrading. To refresh every configured Git marketplace instead, omit the marketplace name. Marketplaces added from a filesystem path are local; update those through the checkout as described below.
 
 ### Claude Code
 
@@ -45,6 +45,14 @@ claude --plugin-dir /path/to/clawdio --agent clawdio:router
 codex plugin marketplace add /path/to/clawdio
 codex plugin add clawdio@jasonmadigan-clawdio
 ```
+
+A local marketplace reads the plugin directly from the checkout. Pull changes there instead of running `codex plugin marketplace upgrade`, which only accepts Git marketplace snapshots:
+
+```bash
+git -C /path/to/clawdio pull --ff-only
+```
+
+Start a new Codex conversation after updating the checkout.
 
 Claude Code can reload changes in an active session:
 
